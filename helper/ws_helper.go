@@ -3,7 +3,9 @@ package helper
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -47,4 +49,18 @@ func GetAWSSecret(awsRegion string, secretName string, secretKeyName string) (st
 
 	// Use the apiKey as needed
 	return secretVaule, nil
+}
+
+// extractEventID extracts the components of the event_id string.
+func ExtractEventInfo(enventInfo string) (string, string, string, error) {
+	// Split the event_id by the "|" delimiter
+	parts := strings.Split(enventInfo, "|")
+
+	// Ensure the split result has exactly 3 parts
+	if len(parts) != 3 {
+		return "", "", "", fmt.Errorf("invalid event_info format: %s", enventInfo)
+	}
+
+	// Return the extracted components
+	return parts[0], parts[1], parts[2], nil
 }

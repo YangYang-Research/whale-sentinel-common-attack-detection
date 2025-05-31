@@ -63,106 +63,6 @@ func init() {
 	}
 }
 
-// RequestBody defines the structure of the request payload
-type RequestBody struct {
-	EventInfo        string  `json:"event_info"`
-	Rules            Rules   `json:"rules"`
-	Payload          Payload `json:"payload"`
-	RequestCreatedAt string  `json:"request_created_at"`
-}
-
-// Rule defines the structure of the rule field in the request body
-type Rules struct {
-	DetectCrossSiteScripting bool `json:"detect_cross_site_scripting"`
-	DetectLargeRequest       bool `json:"detect_large_request"`
-	DetectSqlInjection       bool `json:"detect_sql_injection"`
-	DetectHTTPVerbTampering  bool `json:"detect_http_verb_tampering"`
-	DetectHTTPLargeRequest   bool `json:"detect_http_large_request"`
-}
-
-// Payload defines the structure of the payload field in the request body
-type Payload struct {
-	Data Data `json:"data"`
-}
-
-// Data defines the structure of the data field in the payload
-type Data struct {
-	ClientInformation ClientInformation `json:"client_information"`
-	HTTPRequest       HTTPRequest       `json:"http_request"`
-}
-
-// ClientInformation defines the structure of the client information field in the data
-type ClientInformation struct {
-	IP          string      `json:"ip"`
-	DeviceType  string      `json:"device_type"`
-	NetworkType string      `json:"network_type"`
-	Geolocation Geolocation `json:"geolocation"`
-}
-
-// Geolocation defines the structure of the geolocation field in the client information
-type Geolocation struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Country   string  `json:"country"`
-	City      string  `json:"city"`
-}
-
-// HTTPRequest defines the structure of the HTTP request field in the data
-type HTTPRequest struct {
-	Method      string            `json:"method"`
-	URL         string            `json:"url"`
-	Host        string            `json:"host"`
-	Headers     HTTPRequestHeader `json:"headers"`
-	QueryParams string            `json:"query_parameters"`
-	Body        string            `json:"body"`
-}
-
-// HTTPRequestHeader defines the structure of the HTTP request headers
-type HTTPRequestHeader struct {
-	UserAgent     string `json:"user-agent"`
-	ContentType   string `json:"content-type"`
-	ContentLength int    `json:"content-length"`
-	Referer       string `json:"referer"`
-}
-
-// ResponseBody defines the structure of the response payload
-type ResponseBody struct {
-	Status             string       `json:"status"`
-	Message            string       `json:"message"`
-	Data               ResponseData `json:"data"`
-	EventInfo          string       `json:"event_info"`
-	RequestCreatedAt   string       `json:"request_created_at"`
-	RequestProcessedAt string       `json:"request_processed_at"`
-}
-
-type ResponseData struct {
-	CrossSiteScriptingDetection bool `json:"cross_site_scripting_detection"`
-	SQLInjectionDetection       bool `json:"sql_injection_detection"`
-	HTTPVerbTamperingDetection  bool `json:"http_verb_tampering_detection"`
-	HTTPLargeRequestDetection   bool `json:"http_large_request_detection"`
-}
-
-// ErrorResponse defines the structure of the error response payload
-type ErrorResponse struct {
-	Status    string `json:"status"`
-	Message   string `json:"message"`
-	ErrorCode int    `json:"error_code"`
-}
-
-// extractEventID extracts the components of the event_id string.
-func extractEventInfo(enventInfo string) (string, string, string, error) {
-	// Split the event_id by the "|" delimiter
-	parts := strings.Split(enventInfo, "|")
-
-	// Ensure the split result has exactly 3 parts
-	if len(parts) != 3 {
-		return "", "", "", fmt.Errorf("invalid event_info format: %s", enventInfo)
-	}
-
-	// Return the extracted components
-	return parts[0], parts[1], parts[2], nil
-}
-
 // wsHandleDecoder decodes the input string
 func wsHandleDecoder(input string) (string, error) {
 
@@ -379,28 +279,28 @@ func wsLargeRequestDetection(input int) (bool, error) {
 func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(errorCode)
-	json.NewEncoder(w).Encode(ErrorResponse{
+	json.NewEncoder(w).Encode(shared.ErrorResponse{
 		Status:    "error",
 		Message:   message,
 		ErrorCode: errorCode,
 	})
 }
 
-// getAPIKey retrieves the API key based on the configuration
-func getAPIKey() (string, error) {
+// getAWSSecret retrieves the key based on the configuration
+func getSecret(key string) (string, error) {
 	awsRegion := os.Getenv("AWS_REGION")
 	awsSecretName := os.Getenv("AWS_SECRET_NAME")
-	awsAPISecretKeyName := os.Getenv("AWS_API_SECRET_KEY_NAME")
+	awsSecretKeyName := key
 
-	awsAPIKeyVaule, err := helper.GetAWSSecret(awsRegion, awsSecretName, awsAPISecretKeyName)
+	awsSecretVaule, err := helper.GetAWSSecret(awsRegion, awsSecretName, awsSecretKeyName)
 
-	return awsAPIKeyVaule, err
+	return awsSecretVaule, err
 }
 
 // apiKeyAuthMiddleware is a middleware that handles API Key authentication
 func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiKey, err := getAPIKey()
+		secretValue, err := getSecret(os.Getenv("WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME"))
 		if err != nil {
 			sendErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -420,7 +320,7 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		expectedAuthValue := fmt.Sprintf("ws:%s", apiKey)
+		expectedAuthValue := fmt.Sprintf("ws:%s", secretValue)
 		if string(decodedAuthHeader) != expectedAuthValue {
 			sendErrorResponse(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -462,7 +362,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		req RequestBody
+		req shared.RequestBody
 	)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -477,7 +377,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract components from event_id
-	agentID, serviceName, eventID, err := extractEventInfo(req.EventInfo)
+	agentID, serviceName, eventID, err := helper.ExtractEventInfo(req.EventInfo)
 	if err != nil {
 		sendErrorResponse(w, "Error extracting event_id: %v", http.StatusBadRequest)
 		return
@@ -552,7 +452,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := ResponseData{
+	data := shared.ResponseData{
 		CrossSiteScriptingDetection: xssFound,
 		SQLInjectionDetection:       sqlInjectionFound,
 		HTTPVerbTamperingDetection:  httpVerbTamperingFound,
@@ -560,7 +460,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventInfo := strings.Replace(req.EventInfo, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
-	response := ResponseBody{
+	response := shared.ResponseBody{
 		Status:             "success",
 		Message:            "Request processed successfully",
 		Data:               data,
@@ -607,7 +507,7 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
-	apiKey, err := getAPIKey()
+	secretValue, err := getSecret(os.Getenv("WHALE_SENTINEL_SERVICE_SECRET_KEY_NAME"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API key: %v", err)
 	}
@@ -618,7 +518,7 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	auth := "ws:" + apiKey
+	auth := "ws:" + secretValue
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
 
 	client := &http.Client{
