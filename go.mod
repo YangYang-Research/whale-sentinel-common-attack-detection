@@ -1,4 +1,4 @@
-module github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection
+module github.com/YangYang-Research/whale-sentinel-services/whale-sentinel-common-attack-detection
 
 go 1.24.0
 
