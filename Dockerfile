@@ -8,12 +8,12 @@ WORKDIR /app
 COPY . .
 
 # Install dependencies (if needed)
-WORKDIR /app/ws-common-attack-detection
+WORKDIR /app/whale-sentinel-common-attack-detection
 
 RUN go mod tidy
 
 # Build the Go application
-RUN go build -o ws-common-attack-detection .
+RUN go build -o whale-sentinel-common-attack-detection .
 
 # Second Stage: Nginx + Self-Signed SSL + Go App
 FROM nginx:stable-alpine
@@ -30,13 +30,13 @@ RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -subj "/CN=localhost"
 
 # Copy the Go application from the builder stage
-COPY --from=builder /app/ws-common-attack-detection /usr/local/bin/
+COPY --from=builder /app/whale-sentinel-common-attack-detection /usr/local/bin/
 
 # Copy custom Nginx config to enable HTTPS and proxy to the Go app
-COPY --from=builder /app/ws-common-attack-detection/nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/whale-sentinel-common-attack-detection/nginx.conf /etc/nginx/nginx.conf
 
 # Expose HTTPS port
 EXPOSE 443
 
 # Command to run both Nginx and Go app
-CMD ["sh", "-c", "nginx && /usr/local/bin/ws-common-attack-detection"]
+CMD ["sh", "-c", "nginx && /usr/local/bin/whale-sentinel-common-attack-detection"]
