@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,11 +19,17 @@ import (
 
 	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/helper"
 	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/logger"
+	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/shared"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
 
-var log *logrus.Logger
+var (
+	ctx         = context.Background()
+	log         *logrus.Logger
+	redisClient *redis.Client
+)
 
 // Load environment variables
 func init() {
@@ -33,6 +43,23 @@ func init() {
 		log.WithFields(logrus.Fields{
 			"msg": err,
 		}).Error("Error loading .env file")
+	} else {
+		log.Info("Loaded environment variables from .env file")
+	}
+
+	redisClient = redis.NewClient(&redis.Options{
+		Addr:     os.Getenv("REDIS_HOST") + ":" + os.Getenv("REDIS_PORT"),
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       0,
+	})
+
+	// Check Redis connection
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error connecting to Redis")
+	} else {
+		log.Info("Connected to Redis")
 	}
 }
 
@@ -403,8 +430,32 @@ func apiKeyAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// handlerRedis set and get value from Redis
+func handlerRedis(key string, value string) (string, error) {
+	if value == "" {
+		// Get value from Redis
+		val, err := redisClient.Get(ctx, key).Result()
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"msg": err,
+				"key": key,
+			}).Error("Cannot GET - Not found key in Redis")
+		}
+		return val, err
+	} else {
+		// Set value in Redis
+		err := redisClient.Set(ctx, key, value, 0).Err()
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"msg": err,
+			}).Error("Cannot SET - Cannot setting value in Redis")
+		}
+		return value, err
+	}
+}
+
 // handleData processes incoming data and returns the response
-func handleData(w http.ResponseWriter, r *http.Request) {
+func handleDetection(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sendErrorResponse(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
@@ -420,7 +471,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate required fields
-	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.ClientInformation.DeviceType == "" || req.Payload.Data.ClientInformation.NetworkType == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
+	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
 		sendErrorResponse(w, "Missing required fields", http.StatusBadRequest)
 		return
 	}
@@ -432,9 +483,29 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	agentProfile, err := processAgentProfile(agentID, "", req.EventInfo)
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error processing Agent Configuration")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	var agent shared.AgentProfileRaw
+
+	err = json.Unmarshal([]byte(agentProfile), &agent)
+	if err != nil {
+		log.WithField("msg", err).Error("Failed to parse agent configuration from Redis / ws-configuration-service")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	cad := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
+
 	// Process the rules
 	var xssFound bool
-	if req.Rules.DetectCrossSiteScripting {
+	if cad["detect_cross_site_scripting"].(bool) {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
@@ -449,7 +520,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sqlInjectionFound bool
-	if req.Rules.DetectSqlInjection {
+	if cad["detect_sql_injection"].(bool) {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
@@ -464,7 +535,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpVerbTamperingFound bool
-	if req.Rules.DetectHTTPVerbTampering {
+	if cad["detect_http_verb_tampering"].(bool) {
 		httpVerbTamperingFound, err = wsHTTPVerbTamperingDetection(req.Payload.Data.HTTPRequest.Method)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
@@ -473,7 +544,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpLargeRequestFound bool
-	if req.Rules.DetectHTTPLargeRequest {
+	if cad["detect_http_large_request"].(bool) {
 		httpLargeRequestFound, err = wsLargeRequestDetection(req.Payload.Data.HTTPRequest.Headers.ContentLength)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
@@ -501,6 +572,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 
+	log.Infof("POST %v - 200", r.URL)
 	// Log the request to the logg collector
 	go func(agentID string, eventInfo string, rawRequest string) {
 		// Log the request to the log collector
@@ -529,6 +601,80 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	}(agentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 }
 
+func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %v", err)
+	}
+
+	apiKey, err := getAPIKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url+endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	auth := "ws:" + apiKey
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call endpoint: %v", err)
+	}
+	defer resp.Body.Close()
+
+	log.Infof("POST %v - %v", url+endpoint, resp.StatusCode)
+	return io.ReadAll(resp.Body)
+
+}
+
+func processAgentProfile(agentId string, agentValue string, eventInfo string) (string, error) {
+	getAgentProfile, err := handlerRedis(agentId, agentValue)
+	if err != nil {
+		log.Info("Cannot getting agent profile from Redis. Let getting agent profile from ws-configuration-service")
+	}
+
+	if getAgentProfile == "" {
+		requestBody := map[string]interface{}{
+			"event_info": eventInfo,
+			"payload": map[string]interface{}{
+				"data": map[string]interface{}{
+					"type": "agent",
+					"key":  agentId,
+				},
+			},
+			"request_created_at": time.Now().Format(time.RFC3339),
+		}
+		responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_CONFIGURATION_SERVICE_URL"), os.Getenv("WS_MODULE_CONFIGURATION_SERVICE_ENDPOINT"), requestBody)
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"msg": err,
+			}).Error("Error calling WS Module Configuration Service")
+			return "", fmt.Errorf("failed to call WS Module Configuration Service: %v", err)
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(responseData, &response); err != nil {
+			return "", fmt.Errorf("failed to parse response data: %v", err)
+		}
+
+		data := response["profile"]
+		return data.(string), nil
+	}
+	return getAgentProfile, nil
+}
+
 func main() {
 	log.Info("WS Common Attack Detection is running on port 5003...")
 	// Initialize the logger
@@ -539,7 +685,7 @@ func main() {
 	logger.SetupWSLogger("ws-common-attack-detection", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 
 	// Wrap the handler with a 30-second timeout
-	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handleData), 30*time.Second, "Request timed out")
+	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handleDetection), 30*time.Second, "Request timed out")
 
 	// Register the timeout handler
 	http.Handle("/api/v1/ws/services/common-attack-detection", apiKeyAuthMiddleware(timeoutHandler))
