@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/helper"
-	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/logger"
-	"github.com/YangYang-Research/whale-sentinel-services/ws-common-attack-detection/shared"
+	"github.com/YangYang-Research/whale-sentinel-services/whale-sentinel-common-attack-detection/helper"
+	"github.com/YangYang-Research/whale-sentinel-services/whale-sentinel-common-attack-detection/logger"
+	"github.com/YangYang-Research/whale-sentinel-services/whale-sentinel-common-attack-detection/shared"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
