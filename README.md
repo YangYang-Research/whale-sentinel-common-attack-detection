@@ -1,5 +1,9 @@
 # Whale Sentinel Common Attack Detection
 
+[![CodeQL Advanced](https://github.com/YangYang-Research/whale-sentinel-common-attack-detection/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/YangYang-Research/whale-sentinel-common-attack-detection/actions/workflows/codeql.yml)
+[![Dependency review](https://github.com/YangYang-Research/whale-sentinel-common-attack-detection/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/YangYang-Research/whale-sentinel-common-attack-detection/actions/workflows/dependency-review.yml)
+[![Trivy](https://github.com/YangYang-Research/whale-sentinel-common-attack-detection/actions/workflows/trivy.yml/badge.svg?branch=main)](https://github.com/YangYang-Research/whale-sentinel-common-attack-detection/actions/workflows/trivy.yml)
+
 This module plays a critical role in Whale Sentinel (WS) security by detecting, analyzing, and mitigating common cyberattack patterns through an advanced rule-based detection framework.
 
 Key Functions:
