@@ -36,7 +36,7 @@ type (
 		RequestCreatedAt      int64                     `json:"request_created_at"`
 		RequestProcessedAt    int64                     `json:"request_processed_at"`
 		Title                 string                    `json:"title"`
-		RawRequest            string                    `json:"raw_request"`
+		RawRequest            interface{}               `json:"raw_request"`
 		Timestamp             string                    `json:"timestamp"`
 	}
 
@@ -148,8 +148,21 @@ func Log(level string, service_name string, log_data map[string]interface{}) {
 			RequestCreatedAt:   toUnixTime(log_data["request_created_at"]),
 			RequestProcessedAt: toUnixTime(log_data["request_processed_at"]),
 			Title:              log_data["title"].(string),
-			RawRequest:         SanitizeRawRequest(log_data["raw_request"].(string)),
-			Timestamp:          log_data["timestamp"].(string),
+			RawRequest: func() interface{} {
+				switch v := log_data["raw_request"].(type) {
+				case string:
+					return SanitizeRawRequest(v)
+				case []byte:
+					return SanitizeRawRequest(string(v))
+				default:
+					// Try to marshal to JSON string if possible
+					if b, err := json.Marshal(v); err == nil {
+						return SanitizeRawRequest(string(b))
+					}
+					return v
+				}
+			}(),
+			Timestamp: log_data["timestamp"].(string),
 		}
 		jsonData, err = json.Marshal(entry)
 

@@ -3,6 +3,8 @@ package shared
 type (
 	RequestBody struct {
 		EventInfo        string  `json:"event_info"`
+		AgentID          string  `json:"agent_id"`
+		AgentName        string  `json:"agent_name"`
 		Rules            Rules   `json:"rules"`
 		Payload          Payload `json:"payload"`
 		RequestCreatedAt string  `json:"request_created_at"`

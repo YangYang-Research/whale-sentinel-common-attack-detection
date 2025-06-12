@@ -371,6 +371,11 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate required fields
+	if req.EventInfo == "" || req.AgentID == "" || req.AgentName == "" {
+		sendErrorResponse(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+
 	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
 		sendErrorResponse(w, "Missing required fields", http.StatusBadRequest)
 		return
@@ -383,7 +388,9 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentProfile, err := processAgentProfile(agentID, "", req.EventInfo)
+	eventInfo := strings.Replace(req.EventInfo, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
+
+	status, agentProfile, err := processAgentProfile(req.AgentID, req.AgentName, "", req.EventInfo)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
@@ -392,6 +399,48 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if status != "Success" {
+		response := shared.ResponseBody{
+			Status:             status,
+			Message:            "Failed to retrieve profile",
+			Data:               shared.ResponseData{},
+			EventInfo:          eventInfo,
+			RequestCreatedAt:   req.RequestCreatedAt,
+			RequestProcessedAt: time.Now().Format(time.RFC3339),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+		log.Infof("POST %v - 200", r.URL)
+		// Log the request to the logg collector
+		go func(agentID string, eventInfo string, rawRequest string) {
+			// Log the request to the log collector
+			logData := map[string]interface{}{
+				"name":        "ws-common-attack-detection",
+				"agent_id":    agentID,
+				"source":      strings.ToLower(serviceName),
+				"destination": "ws-common-attack-detection",
+				"event_info":  eventInfo,
+				"event_id":    eventID,
+				"type":        "SERVICE_EVENT",
+				"common_attack_detection": (map[string]bool{
+					"cross_site_scripting": false,
+					"sql_injection":        false,
+					"http_verb_tampering":  false,
+					"http_large_request":   false,
+				}),
+				"title":                "Received request from service",
+				"request_created_at":   req.RequestCreatedAt,
+				"request_processed_at": time.Now().Format(time.RFC3339),
+				"raw_request":          rawRequest,
+				"timestamp":            time.Now().Format(time.RFC3339),
+			}
+
+			logger.Log("info", "ws-common-attack-detection", logData)
+		}(agentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+		return
+	}
 	var agent shared.AgentProfileRaw
 
 	err = json.Unmarshal([]byte(agentProfile), &agent)
@@ -459,7 +508,6 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		HTTPLargeRequestDetection:   httpLargeRequestFound,
 	}
 
-	eventInfo := strings.Replace(req.EventInfo, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
 	response := shared.ResponseBody{
 		Status:             "success",
 		Message:            "Request processed successfully",
@@ -474,7 +522,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	log.Infof("POST %v - 200", r.URL)
 	// Log the request to the logg collector
-	go func(agentID string, eventInfo string, rawRequest string) {
+	go func(agentID string, eventInfo string, rawRequest interface{}) {
 		// Log the request to the log collector
 		logData := map[string]interface{}{
 			"name":        "ws-common-attack-detection",
@@ -492,13 +540,13 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			}),
 			"title":                "Received request from service",
 			"request_created_at":   req.RequestCreatedAt,
-			"request_processed_at": time.Now().Format(time.RFC3339),
+			"request_processed_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			"raw_request":          rawRequest,
-			"timestamp":            time.Now().Format(time.RFC3339),
+			"timestamp":            time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		}
 
 		logger.Log("info", "ws-common-attack-detection", logData)
-	}(agentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+	}(agentID, eventInfo, (req))
 }
 
 func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
@@ -544,7 +592,7 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 
 }
 
-func processAgentProfile(agentId string, agentValue string, eventInfo string) (string, error) {
+func processAgentProfile(agentId string, agentName string, agentValue string, eventInfo string) (string, string, error) {
 	getAgentProfile, err := handlerRedis(agentId, agentValue)
 	if err != nil {
 		log.Info("Cannot getting agent profile from Redis. Let getting agent profile from ws-configuration-service")
@@ -556,28 +604,31 @@ func processAgentProfile(agentId string, agentValue string, eventInfo string) (s
 			"payload": map[string]interface{}{
 				"data": map[string]interface{}{
 					"type": "agent",
-					"key":  agentId,
+					"name": agentName,
+					"id":   agentId,
 				},
 			},
-			"request_created_at": time.Now().Format(time.RFC3339),
+			"request_created_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		}
-		responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_CONFIGURATION_SERVICE_URL"), os.Getenv("WS_MODULE_CONFIGURATION_SERVICE_ENDPOINT"), requestBody)
+		responseData, err := makeHTTPRequest(os.Getenv("WS_MODULE_CONFIGURATION_SERVICE_URL"), os.Getenv("WS_MODULE_CONFIGURATION_SERVICE_ENDPOINT")+"/profile", requestBody)
+
 		if err != nil {
 			log.WithFields(logrus.Fields{
 				"msg": err,
 			}).Error("Error calling WS Module Configuration Service")
-			return "", fmt.Errorf("failed to call WS Module Configuration Service: %v", err)
+			return "Error", "", fmt.Errorf("failed to call WS Module Configuration Service: %v", err)
 		}
 
 		var response map[string]interface{}
+
 		if err := json.Unmarshal(responseData, &response); err != nil {
-			return "", fmt.Errorf("failed to parse response data: %v", err)
+			return "Error", "", fmt.Errorf("failed to parse response data: %v", err)
 		}
 
-		data := response["profile"]
-		return data.(string), nil
+		data := response["data"].(map[string]interface{})
+		return response["status"].(string), data["profile"].(string), nil
 	}
-	return getAgentProfile, nil
+	return "Success", getAgentProfile, nil
 }
 
 func main() {
