@@ -275,6 +275,10 @@ func wsLargeRequestDetection(input int) (bool, error) {
 	return false, nil
 }
 
+func wsUnknowAttackDetection(input string) (bool, error) {
+	return false, nil
+}
+
 // sendErrorResponse sends a JSON error response
 func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -417,13 +421,16 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		go func(agentID string, eventInfo string, rawRequest string) {
 			// Log the request to the log collector
 			logData := map[string]interface{}{
-				"name":        "ws-common-attack-detection",
-				"agent_id":    agentID,
-				"source":      strings.ToLower(serviceName),
-				"destination": "ws-common-attack-detection",
-				"event_info":  eventInfo,
-				"event_id":    eventID,
-				"type":        "SERVICE_EVENT",
+				"name":          "ws-common-attack-detection",
+				"agent_id":      agentID,
+				"source":        strings.ToLower(serviceName),
+				"destination":   "ws-common-attack-detection",
+				"event_info":    eventInfo,
+				"event_id":      eventID,
+				"type":          "SERVICE_EVENT",
+				"action":        "GET_PROFILE",
+				"action_result": "GET_PROFILE_FAIL",
+				"action_status": "FAILURE",
 				"common_attack_detection": (map[string]bool{
 					"cross_site_scripting": false,
 					"sql_injection":        false,
@@ -501,11 +508,29 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var unknowAttackFound bool
+	if cad["detect_unknow_attack"].(bool) {
+		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
+		unknowAttackFound, err = wsUnknowAttackDetection(payload)
+		if err != nil {
+			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
+			return
+		}
+
+	}
 	data := shared.ResponseData{
 		CrossSiteScriptingDetection: xssFound,
 		SQLInjectionDetection:       sqlInjectionFound,
 		HTTPVerbTamperingDetection:  httpVerbTamperingFound,
 		HTTPLargeRequestDetection:   httpLargeRequestFound,
+		UnknowAttackDetection:       unknowAttackFound,
+	}
+
+	var analysisResult string
+	if xssFound || sqlInjectionFound || httpVerbTamperingFound || httpLargeRequestFound || unknowAttackFound {
+		analysisResult = "ABNORMAL_CLIENT_REQUEST"
+	} else {
+		analysisResult = "NORNAL_CLIENT_REQUEST"
 	}
 
 	response := shared.ResponseBody{
@@ -525,18 +550,22 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	go func(agentID string, eventInfo string, rawRequest interface{}) {
 		// Log the request to the log collector
 		logData := map[string]interface{}{
-			"name":        "ws-common-attack-detection",
-			"agent_id":    agentID,
-			"source":      strings.ToLower(serviceName),
-			"destination": "ws-common-attack-detection",
-			"event_info":  eventInfo,
-			"event_id":    eventID,
-			"type":        "SERVICE_EVENT",
+			"name":          "ws-common-attack-detection",
+			"agent_id":      agentID,
+			"source":        strings.ToLower(serviceName),
+			"destination":   "ws-common-attack-detection",
+			"event_info":    eventInfo,
+			"event_id":      eventID,
+			"type":          "SERVICE_EVENT",
+			"action":        "ANALYSIS_REQUEST",
+			"action_result": analysisResult,
+			"action_status": "SUCCESSED",
 			"common_attack_detection": (map[string]bool{
 				"cross_site_scripting": xssFound,
 				"sql_injection":        sqlInjectionFound,
 				"http_verb_tampering":  httpVerbTamperingFound,
 				"http_large_request":   httpLargeRequestFound,
+				"unknow_attack":        unknowAttackFound,
 			}),
 			"title":                "Received request from service",
 			"request_created_at":   req.RequestCreatedAt,

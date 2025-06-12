@@ -16,6 +16,7 @@ type (
 		DetectSqlInjection       bool `json:"detect_sql_injection"`
 		DetectHTTPVerbTampering  bool `json:"detect_http_verb_tampering"`
 		DetectHTTPLargeRequest   bool `json:"detect_http_large_request"`
+		DetectUnknowAttack       bool `json:"detect_unknow_attack"`
 	}
 
 	Payload struct {
@@ -70,6 +71,7 @@ type (
 		SQLInjectionDetection       bool `json:"sql_injection_detection"`
 		HTTPVerbTamperingDetection  bool `json:"http_verb_tampering_detection"`
 		HTTPLargeRequestDetection   bool `json:"http_large_request_detection"`
+		UnknowAttackDetection       bool `json:"unknow_attack_detection"`
 	}
 
 	ErrorResponse struct {

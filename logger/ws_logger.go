@@ -32,6 +32,9 @@ type (
 		Level                 string                    `json:"level"`
 		EventID               string                    `json:"event_id"`
 		Type                  string                    `json:"type"`
+		Action                string                    `json:"action"`
+		ActionResult          string                    `json:"action_result"`
+		ActionStatus          string                    `json:"acction_status"`
 		CommonAttackDetection CommonAttackDetectionRule `json:"common_attack_detection"`
 		RequestCreatedAt      int64                     `json:"request_created_at"`
 		RequestProcessedAt    int64                     `json:"request_processed_at"`
@@ -130,14 +133,17 @@ func Log(level string, service_name string, log_data map[string]interface{}) {
 			return
 		}
 		entry := WSCommonAttack_LogEntry{
-			Name:        service_name,
-			AgentID:     log_data["agent_id"].(string),
-			Source:      log_data["source"].(string),
-			Destination: log_data["destination"].(string),
-			EventInfo:   log_data["event_info"].(string),
-			Level:       strings.ToUpper(level),
-			EventID:     log_data["event_id"].(string),
-			Type:        log_data["type"].(string),
+			Name:         service_name,
+			AgentID:      log_data["agent_id"].(string),
+			Source:       log_data["source"].(string),
+			Destination:  log_data["destination"].(string),
+			EventInfo:    log_data["event_info"].(string),
+			Level:        strings.ToUpper(level),
+			EventID:      log_data["event_id"].(string),
+			Type:         log_data["type"].(string),
+			Action:       log_data["action"].(string),
+			ActionResult: log_data["action_result"].(string),
+			ActionStatus: log_data["action_status"].(string),
 			CommonAttackDetection: CommonAttackDetectionRule{
 				CrossSiteScripting: cadMap["cross_site_scripting"],
 				LargeRequest:       cadMap["large_request"],
