@@ -521,10 +521,15 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 	auth := "ws:" + secretValue
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
 
+	verifyTLS, err := strconv.ParseBool(os.Getenv("WHALE_SENTINEL_VERIFY_TLS"))
+	if err != nil {
+		log.Fatalf("Invalid boolean value for WHALE_SENTINEL_VERIFY_TLS: %v", err)
+	}
+
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: !verifyTLS},
 		},
 	}
 

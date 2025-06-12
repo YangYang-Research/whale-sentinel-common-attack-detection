@@ -51,7 +51,7 @@ type (
 
 func SetupWSLogger(serviceName string, logMaxSize int, logMaxBackups int, logMaxAge int, logCompress bool) {
 	// Ensure directory exists
-	logDir := "/var/log/whale-sentinel/" + serviceName
+	logDir := "/var/log/whale-sentinel/ws-services/" + serviceName
 	err := os.MkdirAll(logDir, 0755)
 	if err != nil {
 		log.Fatalf("Failed to create log directory: %v", err)

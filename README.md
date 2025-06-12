@@ -16,3 +16,6 @@ Key Functions:
 
 ✅ Seamless Integration with WS Security Framework – Works in sync with other Whale Sentinel services to deliver continuous security monitoring, active threat prevention, and instantaneous response.
 
+## Contributing
+
+## License
