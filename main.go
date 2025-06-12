@@ -386,7 +386,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract components from event_id
-	agentID, serviceName, eventID, err := helper.ExtractEventInfo(req.EventInfo)
+	_, serviceName, eventID, err := helper.ExtractEventInfo(req.EventInfo)
 	if err != nil {
 		sendErrorResponse(w, "Error extracting event_id: %v", http.StatusBadRequest)
 		return
@@ -418,11 +418,12 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 		log.Infof("POST %v - 200", r.URL)
 		// Log the request to the logg collector
-		go func(agentID string, eventInfo string, rawRequest string) {
+		go func(agentID string, agentName string, eventInfo string, rawRequest string) {
 			// Log the request to the log collector
 			logData := map[string]interface{}{
 				"name":          "ws-common-attack-detection",
 				"agent_id":      agentID,
+				"agent_name":    agentName,
 				"source":        strings.ToLower(serviceName),
 				"destination":   "ws-common-attack-detection",
 				"event_info":    eventInfo,
@@ -445,7 +446,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			}
 
 			logger.Log("info", "ws-common-attack-detection", logData)
-		}(agentID, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+		}(req.AgentID, req.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 		return
 	}
 	var agent shared.AgentProfileRaw
@@ -547,11 +548,12 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	log.Infof("POST %v - 200", r.URL)
 	// Log the request to the logg collector
-	go func(agentID string, eventInfo string, rawRequest interface{}) {
+	go func(agentID string, agentName string, eventInfo string, rawRequest interface{}) {
 		// Log the request to the log collector
 		logData := map[string]interface{}{
 			"name":          "ws-common-attack-detection",
 			"agent_id":      agentID,
+			"agent_name":    agentName,
 			"source":        strings.ToLower(serviceName),
 			"destination":   "ws-common-attack-detection",
 			"event_info":    eventInfo,
@@ -575,7 +577,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		}
 
 		logger.Log("info", "ws-common-attack-detection", logData)
-	}(agentID, eventInfo, (req))
+	}(req.AgentID, req.AgentName, eventInfo, (req))
 }
 
 func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
