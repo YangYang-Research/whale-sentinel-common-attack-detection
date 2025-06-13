@@ -90,192 +90,89 @@ func wsHandleDecoder(input string) (string, error) {
 	return lowerString, nil
 }
 
-func wsCrossSiteScriptingDetection(input string) (bool, error) {
+func wsCrossSiteScriptingDetection(input string, pattern map[string]interface{}) (bool, error) {
 
-	// XSS detection patterns
-	xssPatterns := []string{
-		`(?:https?://|//)[^\s/]+\.js`,                                                   // Detects .js files
-		`((%3C)|<)((%2F)|/)*[a-z0-9%]+((%3E)|>)`,                                        // Detects <tag>
-		`((\%3C)|<)((\%69)|i|(\%49))((\%6D)|m|(\%4D))((\%67)|g|(\%47))[^\n]+((\%3E)|>)`, // Detects <img>
-		`((%3C)|<)[^\n]+((%3E)|>)`,                                                      // Detects <tag>
-		`(?i)<script[^>]*>.*?</script>`,                                                 // Detects <script> tags
-		`(?i)on\w+\s*=\s*["']?[^"'>]+["']?`,                                             // Detects inline event handlers like onclick=
-		`(?i)javascript\s*:\s*[^"'>\s]+`,                                                // Detects javascript: in URLs
-		`(?i)eval\s*\(`,                                                                 // Detects eval(
-		`(?i)document\.cookie`,                                                          // Detects document.cookie
-		`(?i)alert\s*\(`,                                                                // Detects alert(
-		`(?i)prompt\s*\(`,                                                               // Detects prompt(
-		`(?i)confirm\s*\(`,                                                              // Detects confirm(
-		`(?i)onload\s*=\s*[^"'>]+`,                                                      // Detects onload=
-		`(?i)onerror\s*=\s*[^"'>]+`,                                                     // Detects onerror=
-		`(?i)onmouseover\s*=\s*[^"'>]+`,                                                 // Detects onmouseover=
-		`(?i)onfocus\s*=\s*[^"'>]+`,                                                     // Detects onfocus=
-		`(?i)onblur\s*=\s*[^"'>]+`,                                                      // Detects onblur=
-		`(?i)onchange\s*=\s*[^"'>]+`,                                                    // Detects onchange=
-		`(?i)onsubmit\s*=\s*[^"'>]+`,                                                    // Detects onsubmit=
-		`(?i)onreset\s*=\s*[^"'>]+`,                                                     // Detects onreset=
-		`(?i)onselect\s*=\s*[^"'>]+`,                                                    // Detects onselect=
-		`(?i)onkeydown\s*=\s*[^"'>]+`,                                                   // Detects onkeydown=
-		`(?i)onkeypress\s*=\s*[^"'>]+`,                                                  // Detects onkeypress=
-		`(?i)onmousedown\s*=\s*[^"'>]+`,                                                 // Detects onmousedown=
-		`(?i)onmouseup\s*=\s*[^"'>]+`,                                                   // Detects onmouseup=
-		`(?i)onmousemove\s*=\s*[^"'>]+`,                                                 // Detects onmousemove=
-		`(?i)onmouseout\s*=\s*[^"'>]+`,                                                  // Detects onmouseout=
-		`(?i)onmouseenter\s*=\s*[^"'>]+`,                                                // Detects onmouseenter=
-		`(?i)onmouseleave\s*=\s*[^"'>]+`,                                                // Detects onmouseleave=
-		`(?i)oncontextmenu\s*=\s*[^"'>]+`,                                               // Detects oncontextmenu=
-		`(?i)onresize\s*=\s*[^"'>]+`,                                                    // Detects onresize=
-		`(?i)onscroll\s*=\s*[^"'>]+`,                                                    // Detects onscroll=
-		`(?i)onwheel\s*=\s*[^"'>]+`,                                                     // Detects onwheel=
-		`(?i)oncopy\s*=\s*[^"'>]+`,                                                      // Detects oncopy=
-		`(?i)oncut\s*=\s*[^"'>]+`,                                                       // Detects oncut=
-		`(?i)onpaste\s*=\s*[^"'>]+`,                                                     // Detects onpaste=
-		`(?i)onbeforeunload\s*=\s*[^"'>]+`,                                              // Detects onbeforeunload=
-		`(?i)onhashchange\s*=\s*[^"'>]+`,                                                // Detects onhashchange=
-		`(?i)onmessage\s*=\s*[^"'>]+`,                                                   // Detects onmessage=
-		`(?i)onoffline\s*=\s*[^"'>]+`,                                                   // Detects onoffline=
-		`(?i)ononline\s*=\s*[^"'>]+`,                                                    // Detects ononline=
-		`(?i)onpagehide\s*=\s*[^"'>]+`,                                                  // Detects onpagehide=
-		`(?i)onpageshow\s*=\s*[^"'>]+`,                                                  // Detects onpageshow=
-		`(?i)onpopstate\s*=\s*[^"'>]+`,                                                  // Detects onpopstate=
-		`(?i)onstorage\s*=\s*[^"'>]+`,                                                   // Detects onstorage=
-		`(?i)onunload\s*=\s*[^"'>]+`,                                                    // Detects onunload=
-		`(?i)onerror\s*=\s*[^"'>]+`,                                                     // Detects onerror=
-		`(?i)onhashchange\s*=\s*[^"'>]+`,                                                // Detects onhashchange=
-		`(?i)onload\s*=\s*[^"'>]+`,                                                      // Detects onload=
-		`(?i)onresize\s*=\s*[^"'>]+`,                                                    // Detects onresize=
-		`(?i)onunload\s*=\s*[^"'>]+`,                                                    // Detects onunload=
-		`(?i)onpageshow\s*=\s*[^"'>]+`,                                                  // Detects onpageshow=
-		`(?i)onpagehide\s*=\s*[^"'>]+`,                                                  // Detects onpagehide=
-		`(?i)onpopstate\s*=\s*[^"'>]+`,                                                  // Detects onpopstate=
-		`(?i)ononline\s*=\s*[^"'>]+`,                                                    // Detects ononline=
-		`(?i)onoffline\s*=\s*[^"'>]+`,                                                   // Detects onoffline=
-		`(?i)onmessage\s*=\s*[^"'>]+`,                                                   // Detects onmessage=
-		`(?i)onstorage\s*=\s*[^"'>]+`,                                                   // Detects onstorage=
-		`(?i)onbeforeunload\s*=\s*[^"'>]+`,                                              // Detects onbeforeunload=
-		`(?i)onunload\s*=\s*[^"'>]+`,                                                    // Detects onunload=
-		`(?i)oninput\s*=\s*[^"'>]+`,                                                     // Detects oninput=
-		`(?i)oninvalid\s*=\s*[^"'>]+`,                                                   // Detects oninvalid=
-		`(?i)onsearch\s*=\s*[^"'>]+`,                                                    // Detects onsearch=
-		`(?i)onkeyup\s*=\s*[^"'>]+`,                                                     // Detects onkeyup=
-		`(?i)oncut\s*=\s*[^"'>]+`,                                                       // Detects oncut=
-		`(?i)onpaste\s*=\s*[^"'>]+`,                                                     // Detects onpaste=
-		`(?i)onabort\s*=\s*[^"'>]+`,                                                     // Detects onabort=
-		`(?i)oncanplay\s*=\s*[^"'>]+`,                                                   // Detects oncanplay=
-		`(?i)oncanplaythrough\s*=\s*[^"'>]+`,                                            // Detects oncanplaythrough=
-		`(?i)ondurationchange\s*=\s*[^"'>]+`,                                            // Detects ondurationchange=
-		`(?i)onemptied\s*=\s*[^"'>]+`,                                                   // Detects onemptied=
-		`(?i)onended\s*=\s*[^"'>]+`,                                                     // Detects onended=
-		`(?i)onerror\s*=\s*[^"'>]+`,                                                     // Detects onerror=
-		`(?i)onloadeddata\s*=\s*[^"'>]+`,                                                // Detects onloadeddata=
-		`(?i)onloadedmetadata\s*=\s*[^"'>]+`,                                            // Detects onloadedmetadata=
-		`(?i)onloadstart\s*=\s*[^"'>]+`,                                                 // Detects onloadstart=
-		`(?i)onpause\s*=\s*[^"'>]+`,                                                     // Detects onpause=
-		`(?i)onplay\s*=\s*[^"'>]+`,                                                      // Detects onplay=
-		`(?i)onplaying\s*=\s*[^"'>]+`,                                                   // Detects onplaying=
-		`(?i)onprogress\s*=\s*[^"'>]+`,                                                  // Detects onprogress=
-		`(?i)onratechange\s*=\s*[^"'>]+`,                                                // Detects onratechange=
-		`(?i)onseeked\s*=\s*[^"'>]+`,                                                    // Detects onseeked=
-		`(?i)onseeking\s*=\s*[^"'>]+`,                                                   // Detects onseeking=
-		`(?i)onstalled\s*=\s*[^"'>]+`,                                                   // Detects onstalled=
-		`(?i)onsuspend\s*=\s*[^"'>]+`,                                                   // Detects onsuspend=
-		`(?i)ontimeupdate\s*=\s*[^"'>]+`,                                                // Detects ontimeupdate=
-		`(?i)onvolumechange\s*=\s*[^"'>]+`,                                              // Detects onvolumechange=
-		`(?i)onwaiting\s*=\s*[^"'>]+`,                                                   // Detects onwaiting=
-		`(?i)onshow\s*=\s*[^"'>]+`,                                                      // Detects onshow=
-		`(?i)onvisibilitychange\s*=\s*[^"'>]+`,                                          // Detects onvisibilitychange=
-		`(?i)onanimationstart\s*=\s*[^"'>]+`,                                            // Detects onanimationstart=
-		`(?i)onanimationend\s*=\s*[^"'>]+`,                                              // Detects onanimationend=
-		`(?i)onanimationiteration\s*=\s*[^"'>]+`,                                        // Detects onanimationiteration=
-		`(?i)ontransitionend\s*=\s*[^"'>]+`,                                             // Detects ontransitionend=
-	}
+	for _, p := range pattern {
+		patternStr, ok := p.(string)
+		if !ok {
+			return false, fmt.Errorf("invalid pattern value: expected string, got %T", p)
+		}
 
-	for _, pattern := range xssPatterns {
-		re, err := regexp.Compile(pattern)
+		re, err := regexp.Compile(patternStr)
 		if err != nil {
 			return false, fmt.Errorf("invalid regex pattern: %v", err)
 		}
+
 		if re.MatchString(input) {
 			return true, nil
 		}
 	}
-
 	return false, nil
 }
 
-func wsSQLInjectionDetection(input string) (bool, error) {
+func wsSQLInjectionDetection(input string, pattern map[string]interface{}) (bool, error) {
 
-	// SQL injection detection patterns
-	sqlPatterns := []string{
-		`(?:select\s+.+\s+from\s+.+)`, // Detects select
-		`(?:insert\s+.+\s+into\s+.+)`, // Detects insert
-		`(?:update\s+.+\s+set\s+.+)`,  // Detects update
-		`(?:delete\s+.+\s+from\s+.+)`, // Detects delete
-		`(?:drop\s+.+)`,               // Detects drop
-		`(?:truncate\s+.+)`,           // Detects truncate
-		`(?:alter\s+.+)`,              // Detects alter
-		`(?:exec\s+.+)`,               // Detects exec
-		`(\s*(all|any|not|and|between|in|like|or|some|contains|containsall|containskey)\s+.+[\=\>\<=\!\~]+.+)`, // Detects logical operators
-		`(?:let\s+.+[\=]\s+.*)`,                                 // Detects let
-		`(?:begin\s*.+\s*end)`,                                  // Detects begin...end
-		`(?:\s*[\/\*]+\s*.+\s*[\*\/]+)`,                         // Detects /* comments */
-		`(?:\s*(\-\-)\s*.+\s+)`,                                 // Detects -- comments
-		`(?:\s*(contains|containsall|containskey)\s+.+)`,        // Detects contains, containsall, containskey
-		`\w*((%27)|('))((%6F)|o|(%4F))((%72)|r|(%52))`,          // Detects 'or'
-		`exec(\s|\+)+(s|x)p\w+`,                                 // Detects exec sp_ and xp_
-		`(?i)\b(select|insert|update|delete|drop|exec|union)\b`, // Detects SQL keywords
-		`(?i)(\bor\b|\band\b).*(=|>|<|!=)`,                      // Detects logical operators combined with comparison operators
-		`(?i)'\s*(or|and)\s*'\s*=\s*'`,                          // Detects patterns like ' or ''='
-		`(?i)'\s*(or|and)\s*'[^=]*='`,                           // Detects patterns like ' or 'a'='a
-		`(?i)'\s*(or|and)\s*1=1`,                                // Detects patterns like ' or 1=1
+	for _, p := range pattern {
+		patternStr, ok := p.(string)
+		if !ok {
+			return false, fmt.Errorf("invalid pattern value: expected string, got %T", p)
+		}
 
-	}
-
-	for _, pattern := range sqlPatterns {
-		re, err := regexp.Compile(pattern)
+		re, err := regexp.Compile(patternStr)
 		if err != nil {
 			return false, fmt.Errorf("invalid regex pattern: %v", err)
 		}
+
 		if re.MatchString(input) {
 			return true, nil
 		}
 	}
-
 	return false, nil
 }
 
-func wsHTTPVerbTamperingDetection(input string) (bool, error) {
+func wsHTTPVerbTamperingDetection(input string, pattern string) (bool, error) {
 
 	// HTTP verb tampering detection patterns
-	httpVerbPatterns := []string{
-		`(?i)(HEAD|OPTIONS|TRACE|CONNECT|PROPFIND|PROPPATCH|MKCOL|COPY|MOVE|LOCK|UNLOCK)`, // Detects HTTP verbs
-	}
+	httpVerbPatterns := pattern
 
-	for _, pattern := range httpVerbPatterns {
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			return false, fmt.Errorf("invalid regex pattern: %v", err)
-		}
-		if re.MatchString(input) {
-			return true, nil
-		}
+	re, err := regexp.Compile(httpVerbPatterns)
+	if err != nil {
+		return false, fmt.Errorf("invalid regex pattern: %v", err)
 	}
-
+	if re.MatchString(input) {
+		return true, nil
+	}
 	return false, nil
 }
 
-func wsLargeRequestDetection(input int) (bool, error) {
+func wsLargeRequestDetection(input int, pattern float64) (bool, error) {
 	// Large request detection patterns
-	largeRequestPatterns := 5000 * 1024 // 5MB
+	pattern = pattern * 1048576 // 2MB
 
-	if input > largeRequestPatterns {
+	if input > int(pattern) {
 		return true, nil
 	}
 
 	return false, nil
 }
 
-func wsUnknowAttackDetection(input string) (bool, error) {
+func wsUnknowAttackDetection(input string, pattern map[string]interface{}) (bool, error) {
+
+	for _, p := range pattern {
+		patternStr, ok := p.(string)
+		if !ok {
+			return false, fmt.Errorf("invalid pattern value: expected string, got %T", p)
+		}
+
+		re, err := regexp.Compile(patternStr)
+		if err != nil {
+			return false, err
+		}
+
+		if re.MatchString(input) {
+			return true, nil
+		}
+	}
 	return false, nil
 }
 
@@ -394,7 +291,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	eventInfo := strings.Replace(req.EventInfo, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
 
-	status, agentProfile, err := processAgentProfile(req.AgentID, req.AgentName, "", req.EventInfo)
+	agentStatus, agentProfile, err := processProfile(req.AgentID, req.AgentName, "agent", req.EventInfo)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
@@ -403,9 +300,9 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if status != "Success" {
+	if agentStatus != "Success" {
 		response := shared.ResponseBody{
-			Status:             status,
+			Status:             agentStatus,
 			Message:            "Failed to retrieve profile",
 			Data:               shared.ResponseData{},
 			EventInfo:          eventInfo,
@@ -429,7 +326,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 				"event_info":    eventInfo,
 				"event_id":      eventID,
 				"type":          "SERVICE_EVENT",
-				"action":        "GET_PROFILE",
+				"action":        "GET_AGENT_PROFILE",
 				"action_result": "GET_PROFILE_FAIL",
 				"action_status": "FAILURE",
 				"common_attack_detection": (map[string]bool{
@@ -437,6 +334,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 					"sql_injection":        false,
 					"http_verb_tampering":  false,
 					"http_large_request":   false,
+					"unknow_attack":        false,
 				}),
 				"title":                "Received request from service",
 				"request_created_at":   req.RequestCreatedAt,
@@ -449,7 +347,66 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		}(req.AgentID, req.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 		return
 	}
+
+	serviceStatus, serviceProfile, err := processProfile("", "ws-common-attack-detection", "service", eventInfo)
+	if err != nil {
+		log.WithFields(logrus.Fields{
+			"msg": err,
+		}).Error("Error processing Service Configuration")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if serviceStatus != "Success" {
+		response := shared.ResponseBody{
+			Status:             serviceStatus,
+			Message:            "Failed to retrieve profile",
+			Data:               shared.ResponseData{},
+			EventInfo:          eventInfo,
+			RequestCreatedAt:   req.RequestCreatedAt,
+			RequestProcessedAt: time.Now().Format(time.RFC3339),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+		log.Infof("POST %v - 200", r.URL)
+		// Log the request to the logg collector
+		go func(agentID string, agentName string, eventInfo string, rawRequest string) {
+			// Log the request to the log collector
+			logData := map[string]interface{}{
+				"name":          "ws-common-attack-detection",
+				"agent_id":      agentID,
+				"agent_name":    agentName,
+				"source":        strings.ToLower(serviceName),
+				"destination":   "ws-common-attack-detection",
+				"event_info":    eventInfo,
+				"event_id":      eventID,
+				"type":          "SERVICE_EVENT",
+				"action":        "GET_SERVICE_PROFILE",
+				"action_result": "GET_PROFILE_FAIL",
+				"action_status": "FAILURE",
+				"common_attack_detection": (map[string]bool{
+					"cross_site_scripting": false,
+					"sql_injection":        false,
+					"http_verb_tampering":  false,
+					"http_large_request":   false,
+					"unknow_attack":        false,
+				}),
+				"title":                "Received request from service",
+				"request_created_at":   req.RequestCreatedAt,
+				"request_processed_at": time.Now().Format(time.RFC3339),
+				"raw_request":          rawRequest,
+				"timestamp":            time.Now().Format(time.RFC3339),
+			}
+
+			logger.Log("info", "ws-common-attack-detection", logData)
+		}(req.AgentID, req.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+		return
+	}
+
 	var agent shared.AgentProfileRaw
+	var service shared.ServiceProfileRaw
 
 	err = json.Unmarshal([]byte(agentProfile), &agent)
 	if err != nil {
@@ -458,7 +415,20 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = json.Unmarshal([]byte(serviceProfile), &service)
+	if err != nil {
+		log.WithField("msg", err).Error("Failed to parse service configuration from Redis / ws-configuration-service")
+		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
 	cad := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
+
+	maxSizeRequest_Pattern := service.Profile["max_size_request"].(float64)
+	allowHTTPMethod_Pattern := service.Profile["http_verb_patterns"].(string)
+	xss_Patern := service.Profile["xss_patterns"].(map[string]interface{})
+	sql_Pattern := service.Profile["sql_patterns"].(map[string]interface{})
+	unknowAttack_Pattern := service.Profile["unknow_attack_patterns"].(map[string]interface{})
 
 	// Process the rules
 	var xssFound bool
@@ -469,9 +439,9 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
 		}
-		xssFound, err = wsCrossSiteScriptingDetection(decodedPayload)
+		xssFound, err = wsCrossSiteScriptingDetection(decodedPayload, xss_Patern)
 		if err != nil {
-			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
+			sendErrorResponse(w, "Error processing xss detection", http.StatusInternalServerError)
 			return
 		}
 	}
@@ -484,16 +454,16 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
 		}
-		sqlInjectionFound, err = wsSQLInjectionDetection(decodedPayload)
+		sqlInjectionFound, err = wsSQLInjectionDetection(decodedPayload, sql_Pattern)
 		if err != nil {
-			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
+			sendErrorResponse(w, "Error processing data sqli detection", http.StatusInternalServerError)
 			return
 		}
 	}
 
 	var httpVerbTamperingFound bool
 	if cad["detect_http_verb_tampering"].(bool) {
-		httpVerbTamperingFound, err = wsHTTPVerbTamperingDetection(req.Payload.Data.HTTPRequest.Method)
+		httpVerbTamperingFound, err = wsHTTPVerbTamperingDetection(req.Payload.Data.HTTPRequest.Method, allowHTTPMethod_Pattern)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
@@ -502,7 +472,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	var httpLargeRequestFound bool
 	if cad["detect_http_large_request"].(bool) {
-		httpLargeRequestFound, err = wsLargeRequestDetection(req.Payload.Data.HTTPRequest.Headers.ContentLength)
+		httpLargeRequestFound, err = wsLargeRequestDetection(req.Payload.Data.HTTPRequest.Headers.ContentLength, maxSizeRequest_Pattern)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
@@ -512,13 +482,14 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	var unknowAttackFound bool
 	if cad["detect_unknow_attack"].(bool) {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
-		unknowAttackFound, err = wsUnknowAttackDetection(payload)
+		unknowAttackFound, err = wsUnknowAttackDetection(payload, unknowAttack_Pattern)
 		if err != nil {
-			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
+			sendErrorResponse(w, "Error processing data unknow attack detection", http.StatusInternalServerError)
 			return
 		}
 
 	}
+
 	data := shared.ResponseData{
 		CrossSiteScriptingDetection: xssFound,
 		SQLInjectionDetection:       sqlInjectionFound,
@@ -623,20 +594,20 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 
 }
 
-func processAgentProfile(agentId string, agentName string, agentValue string, eventInfo string) (string, string, error) {
-	getAgentProfile, err := handlerRedis(agentId, agentValue)
+func processProfile(id string, name string, _type string, eventInfo string) (string, string, error) {
+	getProfile, err := handlerRedis(name, "")
 	if err != nil {
-		log.Info("Cannot getting agent profile from Redis. Let getting agent profile from ws-configuration-service")
+		log.Info("Cannot getting " + _type + " profile from Redis. Let getting " + _type + " profile from ws-configuration-service")
 	}
 
-	if getAgentProfile == "" {
+	if getProfile == "" {
 		requestBody := map[string]interface{}{
 			"event_info": eventInfo,
 			"payload": map[string]interface{}{
 				"data": map[string]interface{}{
-					"type": "agent",
-					"name": agentName,
-					"id":   agentId,
+					"type": _type,
+					"name": name,
+					"id":   id,
 				},
 			},
 			"request_created_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
@@ -659,7 +630,7 @@ func processAgentProfile(agentId string, agentName string, agentValue string, ev
 		data := response["data"].(map[string]interface{})
 		return response["status"].(string), data["profile"].(string), nil
 	}
-	return "Success", getAgentProfile, nil
+	return "Success", getProfile, nil
 }
 
 func main() {

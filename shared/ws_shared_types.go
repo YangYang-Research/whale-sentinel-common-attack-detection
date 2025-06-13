@@ -57,6 +57,10 @@ type (
 		Profile map[string]interface{} `json:"profile"`
 	}
 
+	ServiceProfileRaw struct {
+		Profile map[string]interface{} `json:"profile"`
+	}
+
 	ResponseBody struct {
 		Status             string       `json:"status"`
 		Message            string       `json:"message"`
