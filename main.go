@@ -307,7 +307,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			Data:               shared.ResponseData{},
 			EventInfo:          eventInfo,
 			RequestCreatedAt:   req.RequestCreatedAt,
-			RequestProcessedAt: time.Now().Format(time.RFC3339),
+			RequestProcessedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -338,9 +338,9 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 				}),
 				"title":                "Received request from service",
 				"request_created_at":   req.RequestCreatedAt,
-				"request_processed_at": time.Now().Format(time.RFC3339),
+				"request_processed_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 				"raw_request":          rawRequest,
-				"timestamp":            time.Now().Format(time.RFC3339),
+				"timestamp":            time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			}
 
 			logger.Log("info", "ws-common-attack-detection", logData)
@@ -364,7 +364,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			Data:               shared.ResponseData{},
 			EventInfo:          eventInfo,
 			RequestCreatedAt:   req.RequestCreatedAt,
-			RequestProcessedAt: time.Now().Format(time.RFC3339),
+			RequestProcessedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -395,9 +395,9 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 				}),
 				"title":                "Received request from service",
 				"request_created_at":   req.RequestCreatedAt,
-				"request_processed_at": time.Now().Format(time.RFC3339),
+				"request_processed_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 				"raw_request":          rawRequest,
-				"timestamp":            time.Now().Format(time.RFC3339),
+				"timestamp":            time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			}
 
 			logger.Log("info", "ws-common-attack-detection", logData)
@@ -511,7 +511,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		Data:               data,
 		EventInfo:          eventInfo,
 		RequestCreatedAt:   req.RequestCreatedAt,
-		RequestProcessedAt: time.Now().Format(time.RFC3339),
+		RequestProcessedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
