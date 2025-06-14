@@ -181,7 +181,7 @@ func sendErrorResponse(w http.ResponseWriter, message string, errorCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(errorCode)
 	json.NewEncoder(w).Encode(shared.ErrorResponse{
-		Status:    "error",
+		Status:    "Error",
 		Message:   message,
 		ErrorCode: errorCode,
 	})
