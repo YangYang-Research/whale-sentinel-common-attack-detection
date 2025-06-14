@@ -45,7 +45,6 @@ type (
 
 	CommonAttackDetectionRule struct {
 		CrossSiteScripting bool `json:"cross_site_scripting"`
-		LargeRequest       bool `json:"large_request"`
 		SqlInjection       bool `json:"sql_injection"`
 		HTTPVerbTampering  bool `json:"http_verb_tampering"`
 		HTTPLargeRequest   bool `json:"http_large_request"`
@@ -146,7 +145,6 @@ func Log(level string, service_name string, log_data map[string]interface{}) {
 			ActionStatus: log_data["action_status"].(string),
 			CommonAttackDetection: CommonAttackDetectionRule{
 				CrossSiteScripting: cadMap["cross_site_scripting"],
-				LargeRequest:       cadMap["large_request"],
 				SqlInjection:       cadMap["sql_injection"],
 				HTTPVerbTampering:  cadMap["http_verb_tampering"],
 				HTTPLargeRequest:   cadMap["http_large_request"],
