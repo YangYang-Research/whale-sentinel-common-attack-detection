@@ -3,20 +3,8 @@ package shared
 type (
 	RequestBody struct {
 		EventInfo        string  `json:"event_info"`
-		AgentID          string  `json:"agent_id"`
-		AgentName        string  `json:"agent_name"`
-		Rules            Rules   `json:"rules"`
 		Payload          Payload `json:"payload"`
 		RequestCreatedAt string  `json:"request_created_at"`
-	}
-
-	Rules struct {
-		DetectCrossSiteScripting bool `json:"detect_cross_site_scripting"`
-		DetectLargeRequest       bool `json:"detect_large_request"`
-		DetectSqlInjection       bool `json:"detect_sql_injection"`
-		DetectHTTPVerbTampering  bool `json:"detect_http_verb_tampering"`
-		DetectHTTPLargeRequest   bool `json:"detect_http_large_request"`
-		DetectUnknowAttack       bool `json:"detect_unknow_attack"`
 	}
 
 	Payload struct {
@@ -24,6 +12,8 @@ type (
 	}
 
 	Data struct {
+		AgentID           string            `json:"agent_id"`
+		AgentName         string            `json:"agent_name"`
 		ClientInformation ClientInformation `json:"client_information"`
 		HTTPRequest       HTTPRequest       `json:"http_request"`
 	}

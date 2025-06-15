@@ -272,7 +272,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate required fields
-	if req.EventInfo == "" || req.AgentID == "" || req.AgentName == "" {
+	if req.EventInfo == "" || req.Payload.Data.AgentID == "" || req.Payload.Data.AgentName == "" {
 		sendErrorResponse(w, "Missing required fields", http.StatusBadRequest)
 		return
 	}
@@ -291,7 +291,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	eventInfo := strings.Replace(req.EventInfo, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
 
-	agentStatus, agentProfile, err := processProfile(req.AgentID, req.AgentName, "agent", req.EventInfo)
+	agentStatus, agentProfile, err := processProfile(req.Payload.Data.AgentID, req.Payload.Data.AgentName, "agent", req.EventInfo)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"msg": err,
@@ -344,7 +344,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			}
 
 			logger.Log("info", "ws-common-attack-detection", logData)
-		}(req.AgentID, req.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+		}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 		return
 	}
 
@@ -401,7 +401,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 			}
 
 			logger.Log("info", "ws-common-attack-detection", logData)
-		}(req.AgentID, req.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+		}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
 		return
 	}
 
@@ -548,7 +548,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		}
 
 		logger.Log("info", "ws-common-attack-detection", logData)
-	}(req.AgentID, req.AgentName, eventInfo, (req))
+	}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req))
 }
 
 func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
