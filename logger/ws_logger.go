@@ -17,37 +17,58 @@ var logger *logrus.Logger
 
 // LogEntry is the standard structure for logs
 type (
-	Default_LogEntry struct {
-		Title     string `json:"title"`
-		Level     string `json:"level"`
-		Timestamp string `json:"timestamp"`
-	}
-
 	WSCommonAttack_LogEntry struct {
-		Name                  string                    `json:"name"`
-		AgentID               string                    `json:"agent_id"`
-		Source                string                    `json:"source"`
-		Destination           string                    `json:"destination"`
-		EventInfo             string                    `json:"event_info"`
-		Level                 string                    `json:"level"`
-		EventID               string                    `json:"event_id"`
-		Type                  string                    `json:"type"`
-		Action                string                    `json:"action"`
-		ActionResult          string                    `json:"action_result"`
-		ActionStatus          string                    `json:"acction_status"`
-		CommonAttackDetection CommonAttackDetectionRule `json:"common_attack_detection"`
-		RequestCreatedAt      int64                     `json:"request_created_at"`
-		RequestProcessedAt    int64                     `json:"request_processed_at"`
-		Title                 string                    `json:"title"`
-		RawRequest            interface{}               `json:"raw_request"`
-		Timestamp             string                    `json:"timestamp"`
+		Serivce     string      `json:"service"`
+		Profile     Profile     `json:"profile"`
+		Source      string      `json:"source"`
+		Destination string      `json:"destination"`
+		Event       Event       `json:"event"`
+		Level       string      `json:"level"`
+		Type        string      `json:"type"`
+		Action      Action      `json:"action"`
+		Metrix      Metrix      `json:"metrix"`
+		Message     string      `json:"message"`
+		RawRequest  interface{} `json:"raw_request"`
+		Timestamps  Timestamps  `json:"timestamps"`
 	}
 
-	CommonAttackDetectionRule struct {
+	Profile struct {
+		Agent   Agent   `json:"agent"`
+		Service Service `json:"service"`
+	}
+
+	Agent struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+
+	Service struct {
+		Name string `json:"name"`
+	}
+
+	Event struct {
+		ID   string `json:"id"`
+		Info string `json:"info"`
+	}
+
+	Action struct {
+		Type   string `json:"type"`
+		Result string `json:"result"`
+		Status string `json:"status"`
+	}
+
+	Metrix struct {
 		CrossSiteScripting bool `json:"cross_site_scripting"`
 		SqlInjection       bool `json:"sql_injection"`
 		HTTPVerbTampering  bool `json:"http_verb_tampering"`
 		HTTPLargeRequest   bool `json:"http_large_request"`
+		UnknownAttack      bool `json:"unknown_attack"`
+	}
+
+	Timestamps struct {
+		RequestCreatedAt   int64  `json:"request_created_at"`
+		RequestProcessedAt int64  `json:"request_processed_at"`
+		LoggedAt           string `json:"logged_at"`
 	}
 )
 
@@ -119,65 +140,70 @@ func toUnixTime(timestamp interface{}) int64 {
 }
 
 // Log function to create and log entries based on the service name
-func Log(level string, service_name string, log_data map[string]interface{}) {
+func Log(level string, log_data map[string]interface{}) {
 
 	var jsonData []byte
 	var err error
 
-	switch service_name {
-	case "ws-common-attack-detection":
-		cadMap, ok := log_data["common_attack_detection"].(map[string]bool)
-		if !ok {
-			log.Println("Warning: missing or invalid common_attack_detection map")
-			return
-		}
-		entry := WSCommonAttack_LogEntry{
-			Name:         service_name,
-			AgentID:      log_data["agent_id"].(string),
-			Source:       log_data["source"].(string),
-			Destination:  log_data["destination"].(string),
-			EventInfo:    log_data["event_info"].(string),
-			Level:        strings.ToUpper(level),
-			EventID:      log_data["event_id"].(string),
-			Type:         log_data["type"].(string),
-			Action:       log_data["action"].(string),
-			ActionResult: log_data["action_result"].(string),
-			ActionStatus: log_data["action_status"].(string),
-			CommonAttackDetection: CommonAttackDetectionRule{
-				CrossSiteScripting: cadMap["cross_site_scripting"],
-				SqlInjection:       cadMap["sql_injection"],
-				HTTPVerbTampering:  cadMap["http_verb_tampering"],
-				HTTPLargeRequest:   cadMap["http_large_request"],
+	cadMap, ok := log_data["common_attack_detection"].(map[string]bool)
+	if !ok {
+		log.Println("Warning: missing or invalid common_attack_detection map")
+		return
+	}
+
+	entry := WSCommonAttack_LogEntry{
+		Serivce: log_data["service"].(string),
+		Profile: Profile{
+			Agent: Agent{
+				ID:   log_data["agent_id"].(string),
+				Name: log_data["agent_name"].(string),
 			},
+			Service: Service{
+				Name: log_data["service_name"].(string),
+			},
+		},
+		Source:      log_data["source"].(string),
+		Destination: log_data["destination"].(string),
+		Event: Event{
+			ID:   log_data["event_id"].(string),
+			Info: log_data["event_info"].(string),
+		},
+		Level: strings.ToUpper(level),
+		Type:  log_data["type"].(string),
+		Action: Action{
+			Type:   log_data["action_type"].(string),
+			Result: log_data["action_result"].(string),
+			Status: log_data["action_status"].(string),
+		},
+		Metrix: Metrix{
+			CrossSiteScripting: cadMap["cross_site_scripting"],
+			SqlInjection:       cadMap["sql_injection"],
+			HTTPVerbTampering:  cadMap["http_verb_tampering"],
+			HTTPLargeRequest:   cadMap["http_large_request"],
+			UnknownAttack:      cadMap["unknown_attack"],
+		},
+		Message: log_data["message"].(string),
+		RawRequest: func() interface{} {
+			switch v := log_data["raw_request"].(type) {
+			case string:
+				return SanitizeRawRequest(v)
+			case []byte:
+				return SanitizeRawRequest(string(v))
+			default:
+				// Try to marshal to JSON string if possible
+				if b, err := json.Marshal(v); err == nil {
+					return SanitizeRawRequest(string(b))
+				}
+				return v
+			}
+		}(),
+		Timestamps: Timestamps{
 			RequestCreatedAt:   toUnixTime(log_data["request_created_at"]),
 			RequestProcessedAt: toUnixTime(log_data["request_processed_at"]),
-			Title:              log_data["title"].(string),
-			RawRequest: func() interface{} {
-				switch v := log_data["raw_request"].(type) {
-				case string:
-					return SanitizeRawRequest(v)
-				case []byte:
-					return SanitizeRawRequest(string(v))
-				default:
-					// Try to marshal to JSON string if possible
-					if b, err := json.Marshal(v); err == nil {
-						return SanitizeRawRequest(string(b))
-					}
-					return v
-				}
-			}(),
-			Timestamp: log_data["timestamp"].(string),
-		}
-		jsonData, err = json.Marshal(entry)
-
-	default:
-		entry := Default_LogEntry{
-			Title:     log_data["title"].(string),
-			Level:     strings.ToUpper(level),
-			Timestamp: log_data["timestamp"].(string),
-		}
-		jsonData, err = json.Marshal(entry)
+			LoggedAt:           time.Now().Format(time.RFC3339),
+		},
 	}
+	jsonData, err = json.Marshal(entry)
 
 	if err != nil {
 		log.Printf("Failed to marshal log entry: %v", err)

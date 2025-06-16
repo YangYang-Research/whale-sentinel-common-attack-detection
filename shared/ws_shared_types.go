@@ -55,6 +55,7 @@ type (
 		Status             string       `json:"status"`
 		Message            string       `json:"message"`
 		Data               ResponseData `json:"data"`
+		AnalysisResult     string       `json:"analysis_result"`
 		EventInfo          string       `json:"event_info"`
 		RequestCreatedAt   string       `json:"request_created_at"`
 		RequestProcessedAt string       `json:"request_processed_at"`

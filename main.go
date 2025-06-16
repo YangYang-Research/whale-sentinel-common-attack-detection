@@ -292,18 +292,14 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	eventInfo := strings.Replace(req.EventInfo, "WS_GATEWAY_SERVICE", "WS_COMMON_ATTACK_DETECTION", -1)
 
 	agentStatus, agentProfile, err := processProfile(req.Payload.Data.AgentID, req.Payload.Data.AgentName, "agent", req.EventInfo)
-	if err != nil {
+	if err != nil || agentStatus != "Success" || agentProfile == "" {
 		log.WithFields(logrus.Fields{
 			"msg": err,
-		}).Error("Error processing Agent Configuration")
-		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+		}).Warn("Agent profile retrieval failed.")
 
-	if agentStatus != "Success" {
 		response := shared.ResponseBody{
 			Status:             agentStatus,
-			Message:            "Failed to retrieve profile",
+			Message:            "Failed to retrieve agent profile.",
 			Data:               shared.ResponseData{},
 			EventInfo:          eventInfo,
 			RequestCreatedAt:   req.RequestCreatedAt,
@@ -315,20 +311,21 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 		log.Infof("POST %v - 200", r.URL)
 		// Log the request to the logg collector
-		go func(agentID string, agentName string, eventInfo string, rawRequest string) {
+		go func(Id string, Name string, eventInfo string, rawRequest interface{}) {
 			// Log the request to the log collector
 			logData := map[string]interface{}{
-				"name":          "ws-common-attack-detection",
-				"agent_id":      agentID,
-				"agent_name":    agentName,
+				"service":       "ws-common-attack-detection",
+				"agent_id":      Id,
+				"agent_name":    Name,
+				"service_name":  "",
 				"source":        strings.ToLower(serviceName),
 				"destination":   "ws-common-attack-detection",
 				"event_info":    eventInfo,
 				"event_id":      eventID,
-				"type":          "SERVICE_EVENT",
-				"action":        "GET_AGENT_PROFILE",
-				"action_result": "GET_PROFILE_FAIL",
-				"action_status": "FAILURE",
+				"type":          "SERVICE_TO_SERVICE_EVENT",
+				"action_type":   "ANALYSIS_REQUEST",
+				"action_result": "ANALYSIS_REQUEST_FAILED_MISSING_AGENT_PROFILE",
+				"action_status": "FAILED",
 				"common_attack_detection": (map[string]bool{
 					"cross_site_scripting": false,
 					"sql_injection":        false,
@@ -336,31 +333,26 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 					"http_large_request":   false,
 					"unknow_attack":        false,
 				}),
-				"title":                "Received request from service",
+				"message":              "Cannot analyze request due to missing agent profile.",
 				"request_created_at":   req.RequestCreatedAt,
 				"request_processed_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 				"raw_request":          rawRequest,
-				"timestamp":            time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			}
 
-			logger.Log("info", "ws-common-attack-detection", logData)
-		}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+			logger.Log("info", logData)
+		}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req))
 		return
 	}
 
 	serviceStatus, serviceProfile, err := processProfile("", "ws-common-attack-detection", "service", eventInfo)
-	if err != nil {
+	if err != nil || serviceStatus != "Success" || serviceProfile == "" {
 		log.WithFields(logrus.Fields{
 			"msg": err,
-		}).Error("Error processing Service Configuration")
-		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+		}).Error("Service profile retrieval failed.")
 
-	if serviceStatus != "Success" {
 		response := shared.ResponseBody{
-			Status:             serviceStatus,
-			Message:            "Failed to retrieve profile",
+			Status:             agentStatus,
+			Message:            "Failed to retrieve service profile.",
 			Data:               shared.ResponseData{},
 			EventInfo:          eventInfo,
 			RequestCreatedAt:   req.RequestCreatedAt,
@@ -372,20 +364,21 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 		log.Infof("POST %v - 200", r.URL)
 		// Log the request to the logg collector
-		go func(agentID string, agentName string, eventInfo string, rawRequest string) {
+		go func(Id string, Name string, eventInfo string, rawRequest interface{}) {
 			// Log the request to the log collector
 			logData := map[string]interface{}{
-				"name":          "ws-common-attack-detection",
-				"agent_id":      agentID,
-				"agent_name":    agentName,
+				"service":       "ws-common-attack-detection",
+				"agent_id":      "",
+				"agent_name":    "",
+				"service_name":  "ws-common-attack-detection",
 				"source":        strings.ToLower(serviceName),
 				"destination":   "ws-common-attack-detection",
 				"event_info":    eventInfo,
 				"event_id":      eventID,
-				"type":          "SERVICE_EVENT",
-				"action":        "GET_SERVICE_PROFILE",
-				"action_result": "GET_PROFILE_FAIL",
-				"action_status": "FAILURE",
+				"type":          "SERVICE_TO_SERVICE_EVENT",
+				"action_type":   "ANALYSIS_REQUEST",
+				"action_result": "ANALYSIS_REQUEST_FAILED_MISSING_SERVICE_PROFILE",
+				"action_status": "FAILED",
 				"common_attack_detection": (map[string]bool{
 					"cross_site_scripting": false,
 					"sql_injection":        false,
@@ -393,15 +386,14 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 					"http_large_request":   false,
 					"unknow_attack":        false,
 				}),
-				"title":                "Received request from service",
+				"message":              "Cannot analyze request due to missing service profile.",
 				"request_created_at":   req.RequestCreatedAt,
 				"request_processed_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 				"raw_request":          rawRequest,
-				"timestamp":            time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			}
 
-			logger.Log("info", "ws-common-attack-detection", logData)
-		}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body))
+			logger.Log("info", logData)
+		}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req))
 		return
 	}
 
@@ -490,7 +482,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	data := shared.ResponseData{
+	mapData := shared.ResponseData{
 		CrossSiteScriptingDetection: xssFound,
 		SQLInjectionDetection:       sqlInjectionFound,
 		HTTPVerbTamperingDetection:  httpVerbTamperingFound,
@@ -500,15 +492,16 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	var analysisResult string
 	if xssFound || sqlInjectionFound || httpVerbTamperingFound || httpLargeRequestFound || unknowAttackFound {
-		analysisResult = "ABNORMAL_CLIENT_REQUEST"
+		analysisResult = "ABNORMAL_REQUEST"
 	} else {
-		analysisResult = "NORNAL_CLIENT_REQUEST"
+		analysisResult = "NORNAL_REQUEST"
 	}
 
 	response := shared.ResponseBody{
-		Status:             "success",
-		Message:            "Request processed successfully",
-		Data:               data,
+		Status:             "Success",
+		Message:            "Analysis completed successfully.",
+		Data:               mapData,
+		AnalysisResult:     analysisResult,
 		EventInfo:          eventInfo,
 		RequestCreatedAt:   req.RequestCreatedAt,
 		RequestProcessedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
@@ -519,19 +512,20 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	log.Infof("POST %v - 200", r.URL)
 	// Log the request to the logg collector
-	go func(agentID string, agentName string, eventInfo string, rawRequest interface{}) {
+	go func(Id string, Name string, eventInfo string, rawRequest interface{}) {
 		// Log the request to the log collector
 		logData := map[string]interface{}{
-			"name":          "ws-common-attack-detection",
-			"agent_id":      agentID,
-			"agent_name":    agentName,
+			"service":       "ws-common-attack-detection",
+			"agent_id":      Id,
+			"agent_name":    Name,
+			"service_name":  "ws-common-attack-detection",
 			"source":        strings.ToLower(serviceName),
 			"destination":   "ws-common-attack-detection",
 			"event_info":    eventInfo,
 			"event_id":      eventID,
-			"type":          "SERVICE_EVENT",
-			"action":        "ANALYSIS_REQUEST",
-			"action_result": analysisResult,
+			"type":          "SERVICE_TO_SERVICE_EVENT",
+			"action_type":   "ANALYSIS_REQUEST",
+			"action_result": "SERVICE_ANALYSIS_SUCCESSED_" + analysisResult,
 			"action_status": "SUCCESSED",
 			"common_attack_detection": (map[string]bool{
 				"cross_site_scripting": xssFound,
@@ -540,14 +534,13 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 				"http_large_request":   httpLargeRequestFound,
 				"unknow_attack":        unknowAttackFound,
 			}),
-			"title":                "Received request from service",
+			"message":              "Analysis completed successfully.",
 			"request_created_at":   req.RequestCreatedAt,
 			"request_processed_at": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			"raw_request":          rawRequest,
-			"timestamp":            time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		}
 
-		logger.Log("info", "ws-common-attack-detection", logData)
+		logger.Log("info", logData)
 	}(req.Payload.Data.AgentID, req.Payload.Data.AgentName, eventInfo, (req))
 }
 
@@ -597,7 +590,7 @@ func makeHTTPRequest(url, endpoint string, body interface{}) ([]byte, error) {
 func processProfile(id string, name string, _type string, eventInfo string) (string, string, error) {
 	getProfile, err := handlerRedis(name, "")
 	if err != nil {
-		log.Info("Cannot getting " + _type + " profile from Redis. Let getting " + _type + " profile from ws-configuration-service")
+		log.Warn("Cannot getting " + _type + " profile from Redis. Let getting " + _type + " profile from ws-configuration-service")
 	}
 
 	if getProfile == "" {
