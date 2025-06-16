@@ -58,11 +58,11 @@ type (
 	}
 
 	Metrix struct {
-		CrossSiteScripting bool `json:"cross_site_scripting"`
-		SqlInjection       bool `json:"sql_injection"`
-		HTTPVerbTampering  bool `json:"http_verb_tampering"`
-		HTTPLargeRequest   bool `json:"http_large_request"`
-		UnknownAttack      bool `json:"unknown_attack"`
+		CrossSiteScriptingDetection bool `json:"cross_site_scripting_detection"`
+		SQLInjectionDetection       bool `json:"sql_injection_detection"`
+		HttpVerbTamperingDetection  bool `json:"http_verb_tampering_detection"`
+		HttpLargeRequestDetection   bool `json:"http_large_request_detection"`
+		UnknowAttackDetection       bool `json:"unknow_attack_detection"`
 	}
 
 	Timestamps struct {
@@ -176,11 +176,11 @@ func Log(level string, log_data map[string]interface{}) {
 			Status: log_data["action_status"].(string),
 		},
 		Metrix: Metrix{
-			CrossSiteScripting: cadMap["cross_site_scripting"],
-			SqlInjection:       cadMap["sql_injection"],
-			HTTPVerbTampering:  cadMap["http_verb_tampering"],
-			HTTPLargeRequest:   cadMap["http_large_request"],
-			UnknownAttack:      cadMap["unknown_attack"],
+			CrossSiteScriptingDetection: cadMap["cross_site_scripting_detection"],
+			SQLInjectionDetection:       cadMap["sql_injection_detection"],
+			HttpVerbTamperingDetection:  cadMap["http_verb_tampering_detection"],
+			HttpLargeRequestDetection:   cadMap["http_large_request_detection"],
+			UnknowAttackDetection:       cadMap["unknow_attack_detection"],
 		},
 		Message: log_data["message"].(string),
 		RawRequest: func() interface{} {
