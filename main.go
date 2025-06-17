@@ -139,7 +139,7 @@ func wsHTTPVerbTamperingDetection(input string, pattern string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("invalid regex pattern: %v", err)
 	}
-	if re.MatchString(input) {
+	if !re.MatchString(input) {
 		return true, nil
 	}
 	return false, nil
