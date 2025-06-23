@@ -66,7 +66,7 @@ type (
 		SQLInjectionDetection       bool `json:"sql_injection_detection"`
 		HTTPVerbTamperingDetection  bool `json:"http_verb_tampering_detection"`
 		HTTPLargeRequestDetection   bool `json:"http_large_request_detection"`
-		UnknowAttackDetection       bool `json:"unknow_attack_detection"`
+		UnknownAttackDetection      bool `json:"unknown_attack_detection"`
 	}
 
 	ErrorResponse struct {

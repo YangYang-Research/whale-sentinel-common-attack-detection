@@ -156,7 +156,7 @@ func wsLargeRequestDetection(input int, pattern float64) (bool, error) {
 	return false, nil
 }
 
-func wsUnknowAttackDetection(input string, pattern map[string]interface{}) (bool, error) {
+func wsUnknownAttackDetection(input string, pattern map[string]interface{}) (bool, error) {
 
 	for _, p := range pattern {
 		patternStr, ok := p.(string)
@@ -331,7 +331,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 					"sql_injection_detection":        false,
 					"http_verb_tampering_detection":  false,
 					"http_large_request_detection":   false,
-					"unknow_attack_detection":        false,
+					"unknown_attack_detection":       false,
 				}),
 				"message":              "Cannot analyze request due to missing agent profile.",
 				"request_created_at":   req.RequestCreatedAt,
@@ -384,7 +384,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 					"sql_injection_detection":        false,
 					"http_verb_tampering_detection":  false,
 					"http_large_request_detection":   false,
-					"unknow_attack_detection":        false,
+					"unknown_attack_detection":       false,
 				}),
 				"message":              "Cannot analyze request due to missing service profile.",
 				"request_created_at":   req.RequestCreatedAt,
@@ -420,7 +420,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	allowHTTPMethod_Pattern := service.Profile["http_verb_patterns"].(string)
 	xss_Patern := service.Profile["xss_patterns"].(map[string]interface{})
 	sql_Pattern := service.Profile["sql_patterns"].(map[string]interface{})
-	unknowAttack_Pattern := service.Profile["unknow_attack_patterns"].(map[string]interface{})
+	unknownAttack_Pattern := service.Profile["unknown_attack_patterns"].(map[string]interface{})
 
 	// Process the rules
 	var xssFound bool
@@ -471,12 +471,12 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var unknowAttackFound bool
-	if cad["detect_unknow_attack"].(bool) {
+	var unknownAttackFound bool
+	if cad["detect_unknown_attack"].(bool) {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
-		unknowAttackFound, err = wsUnknowAttackDetection(payload, unknowAttack_Pattern)
+		unknownAttackFound, err = wsUnknownAttackDetection(payload, unknownAttack_Pattern)
 		if err != nil {
-			sendErrorResponse(w, "Error processing data unknow attack detection", http.StatusInternalServerError)
+			sendErrorResponse(w, "Error processing data unknown attack detection", http.StatusInternalServerError)
 			return
 		}
 
@@ -487,11 +487,11 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		SQLInjectionDetection:       sqlInjectionFound,
 		HTTPVerbTamperingDetection:  httpVerbTamperingFound,
 		HTTPLargeRequestDetection:   httpLargeRequestFound,
-		UnknowAttackDetection:       unknowAttackFound,
+		UnknownAttackDetection:      unknownAttackFound,
 	}
 
 	var analysisResult string
-	if xssFound || sqlInjectionFound || httpVerbTamperingFound || httpLargeRequestFound || unknowAttackFound {
+	if xssFound || sqlInjectionFound || httpVerbTamperingFound || httpLargeRequestFound || unknownAttackFound {
 		analysisResult = "ABNORMAL_REQUEST"
 	} else {
 		analysisResult = "NORNAL_REQUEST"
@@ -532,7 +532,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 				"sql_injection_detection":        sqlInjectionFound,
 				"http_verb_tampering_detection":  httpVerbTamperingFound,
 				"http_large_request_detection":   httpLargeRequestFound,
-				"unknow_attack_detection":        unknowAttackFound,
+				"unknown_attack_detection":       unknownAttackFound,
 			}),
 			"message":              "Analysis completed successfully.",
 			"request_created_at":   req.RequestCreatedAt,
