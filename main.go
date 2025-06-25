@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -90,9 +91,9 @@ func wsHandleDecoder(input string) (string, error) {
 	return lowerString, nil
 }
 
-func wsCrossSiteScriptingDetection(input string, pattern map[string]interface{}) (bool, error) {
+func wsCrossSiteScriptingDetection(input string, patterns map[string]interface{}) (bool, error) {
 
-	for _, p := range pattern {
+	for _, p := range patterns {
 		patternStr, ok := p.(string)
 		if !ok {
 			return false, fmt.Errorf("invalid pattern value: expected string, got %T", p)
@@ -110,9 +111,9 @@ func wsCrossSiteScriptingDetection(input string, pattern map[string]interface{})
 	return false, nil
 }
 
-func wsSQLInjectionDetection(input string, pattern map[string]interface{}) (bool, error) {
+func wsSQLInjectionDetection(input string, patterns map[string]interface{}) (bool, error) {
 
-	for _, p := range pattern {
+	for _, p := range patterns {
 		patternStr, ok := p.(string)
 		if !ok {
 			return false, fmt.Errorf("invalid pattern value: expected string, got %T", p)
@@ -156,17 +157,16 @@ func wsLargeRequestDetection(input int, pattern float64) (bool, error) {
 	return false, nil
 }
 
-func wsUnknownAttackDetection(input string, pattern map[string]interface{}) (bool, error) {
-
-	for _, p := range pattern {
-		patternStr, ok := p.(string)
+func wsUnknownAttackDetection(input string, patterns map[string]interface{}) (bool, error) {
+	for k, v := range patterns {
+		patternStr, ok := v.(string)
 		if !ok {
-			return false, fmt.Errorf("invalid pattern value: expected string, got %T", p)
+			return false, fmt.Errorf("invalid pattern value at %s: expected string", k)
 		}
 
 		re, err := regexp.Compile(patternStr)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("invalid regex at key '%s': %v", k, err)
 		}
 
 		if re.MatchString(input) {
@@ -174,6 +174,105 @@ func wsUnknownAttackDetection(input string, pattern map[string]interface{}) (boo
 		}
 	}
 	return false, nil
+}
+
+func wsInsecureRedirectDetection(self_domain string, redirect_domain string, patterns map[string]interface{}) (bool, error) {
+	// Parse redirect_domain để lấy phần host
+	parsedURL, err := url.Parse(redirect_domain)
+	if err != nil {
+		return false, err
+	}
+
+	redirectHost := strings.ToLower(parsedURL.Host)
+	selfHost := strings.ToLower(self_domain)
+
+	// Nếu khác self_host thì kiểm tra tiếp
+	if redirectHost != selfHost {
+		// Nếu bật kiểm tra extend_domain thì kiểm tra trong danh sách
+		if val, ok := patterns["extend_domain"].(bool); ok && val {
+			if rawList, ok := patterns["patterns"].([]interface{}); ok {
+				for _, p := range rawList {
+					if domainStr, ok := p.(string); ok && strings.ToLower(domainStr) == redirectHost {
+						return false, nil // domain nằm trong danh sách cho phép → an toàn
+					}
+				}
+			}
+		}
+		// Không bật hoặc không nằm trong danh sách → không an toàn
+		return true, nil
+	}
+
+	// redirect cùng domain → an toàn
+	return false, nil
+}
+
+func wsInsecureFileUpload(files []interface{}, patterns map[string]interface{}) (bool, map[string]map[string]bool, error) {
+	secureFileName := patterns["file_name"].(bool)
+	// secureFileContent := patterns["file_content"].(bool)
+	securFileSize := patterns["file_size"].(float64)
+	secureFileType := true // patterns["file_type"].(bool)
+
+	// Dùng để lưu kết quả kiểm tra của từng file
+	allViolations := make(map[string]map[string]bool)
+
+	foundViolation := false
+
+	for _, file := range files {
+		fmt.Printf("DEBUG file: %+v (type: %T)\n", file, file)
+
+		fileMap, ok := file.(map[string]interface{})
+		if !ok {
+			fmt.Println("DEBUG: file is not map[string]interface{}")
+			continue
+		}
+
+		fileName, _ := fileMap["FileName"].(string)
+		fileSize, _ := fileMap["FileSize"].(float64)
+		fileType, _ := fileMap["FileType"].(string)
+
+		// Object lưu kết quả kiểm tra từng tiêu chí cho file hiện tại
+		violations := map[string]bool{
+			"file_name":    false,
+			"file_size":    false,
+			"file_type":    false,
+			"file_content": false, // chưa xử lý
+		}
+
+		// 1. Tên file có nhiều dấu chấm → nghi ngờ (ví dụ: .txt.exe)
+		if secureFileName && strings.Count(fileName, ".") > 1 {
+			violations["file_name"] = true
+			foundViolation = true
+		}
+
+		// 2. Kích thước file vượt quá giới hạn
+		if securFileSize > 0 {
+			maxSize := securFileSize * 1048576 // MB → byte
+			if fileSize > maxSize {
+				violations["file_size"] = true
+				foundViolation = true
+			}
+		}
+
+		// 3. Loại MIME không khớp với phần mở rộng
+		if secureFileType {
+			if dotIndex := strings.LastIndex(fileName, "."); dotIndex != -1 && dotIndex < len(fileName)-1 {
+				ext := fileName[dotIndex+1:]
+				expectedMime := mime.TypeByExtension("." + ext)
+				if expectedMime == "" || !strings.HasPrefix(expectedMime, fileType) {
+					violations["file_type"] = true
+					foundViolation = true
+				}
+			}
+		}
+
+		// (Tùy chọn sau) 4. Kiểm tra nội dung file nếu cần
+
+		// Lưu lại kết quả kiểm tra cho file này
+		allViolations[fileName] = violations
+	}
+	fmt.Printf("Debug: %+v", allViolations)
+	fmt.Printf("Debug: %+v", foundViolation)
+	return foundViolation, allViolations, nil
 }
 
 // sendErrorResponse sends a JSON error response
@@ -277,7 +376,11 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Payload.Data.ClientInformation.IP == "" || req.Payload.Data.HTTPRequest.Method == "" || req.Payload.Data.HTTPRequest.URL == "" || req.Payload.Data.HTTPRequest.Headers.UserAgent == "" || req.Payload.Data.HTTPRequest.Headers.ContentType == "" {
+	if req.Payload.Data.ClientInformation == (shared.ClientInformation{}) ||
+		req.Payload.Data.HTTPRequest.Method == "" ||
+		req.Payload.Data.HTTPRequest.URL == "" ||
+		req.Payload.Data.HTTPRequest.Host == "" ||
+		req.Payload.Data.HTTPRequest.Headers == (shared.HTTPRequestHeader{}) {
 		sendErrorResponse(w, "Missing required fields", http.StatusBadRequest)
 		return
 	}
@@ -413,25 +516,28 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Whale Sentinel - Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	// Agent Running Profile
+	agent_RunningProfile := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
 
-	cad := agent.Profile["ws_module_common_attack_detection"].(map[string]interface{})
-
-	maxSizeRequest_Pattern := service.Profile["max_size_request"].(float64)
-	allowHTTPMethod_Pattern := service.Profile["http_verb_patterns"].(string)
-	xss_Patern := service.Profile["xss_patterns"].(map[string]interface{})
-	sql_Pattern := service.Profile["sql_patterns"].(map[string]interface{})
-	unknownAttack_Pattern := service.Profile["unknown_attack_patterns"].(map[string]interface{})
+	// Service Running Profile
+	service_DetectHTTPLargeRequest := service.Profile["detect_http_large_request"].(map[string]interface{})
+	service_DetectHTTPVerbTampering := service.Profile["detect_http_verb_tampering"].(map[string]interface{})
+	service_DetectXSS := service.Profile["detect_xss"].(map[string]interface{})
+	service_DetectSQLI := service.Profile["detect_sqli"].(map[string]interface{})
+	service_DetectUnknownAttack := service.Profile["detect_unknown_attack"].(map[string]interface{})
+	service_DetectInsecureRedirect := service.Profile["detect_insecure_redirect"].(map[string]interface{})
+	service_DetectInsecureFileUpload := service.Profile["detect_insecure_file_upload"].(map[string]interface{})
 
 	// Process the rules
 	var xssFound bool
-	if cad["detect_cross_site_scripting"].(bool) {
+	if agent_RunningProfile["detect_cross_site_scripting"].(bool) && service_DetectXSS["enable"].(bool) {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
 		}
-		xssFound, err = wsCrossSiteScriptingDetection(decodedPayload, xss_Patern)
+		xssFound, err = wsCrossSiteScriptingDetection(decodedPayload, service_DetectXSS["patterns"].(map[string]interface{}))
 		if err != nil {
 			sendErrorResponse(w, "Error processing xss detection", http.StatusInternalServerError)
 			return
@@ -439,14 +545,14 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sqlInjectionFound bool
-	if cad["detect_sql_injection"].(bool) {
+	if agent_RunningProfile["detect_sql_injection"].(bool) && service_DetectSQLI["enable"].(bool) {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
 		decodedPayload, err := wsHandleDecoder(payload)
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
 		}
-		sqlInjectionFound, err = wsSQLInjectionDetection(decodedPayload, sql_Pattern)
+		sqlInjectionFound, err = wsSQLInjectionDetection(decodedPayload, service_DetectSQLI["patterns"].(map[string]interface{}))
 		if err != nil {
 			sendErrorResponse(w, "Error processing data sqli detection", http.StatusInternalServerError)
 			return
@@ -454,8 +560,8 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpVerbTamperingFound bool
-	if cad["detect_http_verb_tampering"].(bool) {
-		httpVerbTamperingFound, err = wsHTTPVerbTamperingDetection(req.Payload.Data.HTTPRequest.Method, allowHTTPMethod_Pattern)
+	if agent_RunningProfile["detect_http_verb_tampering"].(bool) && service_DetectHTTPVerbTampering["enable"].(bool) {
+		httpVerbTamperingFound, err = wsHTTPVerbTamperingDetection(req.Payload.Data.HTTPRequest.Method, service_DetectHTTPVerbTampering["pattern"].(string))
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
@@ -463,8 +569,8 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var httpLargeRequestFound bool
-	if cad["detect_http_large_request"].(bool) {
-		httpLargeRequestFound, err = wsLargeRequestDetection(req.Payload.Data.HTTPRequest.Headers.ContentLength, maxSizeRequest_Pattern)
+	if agent_RunningProfile["detect_http_large_request"].(bool) && service_DetectHTTPLargeRequest["enable"].(bool) {
+		httpLargeRequestFound, err = wsLargeRequestDetection(req.Payload.Data.HTTPRequest.Headers.ContentLength, service_DetectHTTPLargeRequest["pattern"].(float64))
 		if err != nil {
 			sendErrorResponse(w, "Error processing data", http.StatusInternalServerError)
 			return
@@ -472,14 +578,49 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var unknownAttackFound bool
-	if cad["detect_unknown_attack"].(bool) {
+	if agent_RunningProfile["detect_unknown_attack"].(bool) && service_DetectUnknownAttack["enable"].(bool) {
 		payload := req.Payload.Data.HTTPRequest.QueryParams + req.Payload.Data.HTTPRequest.Body
-		unknownAttackFound, err = wsUnknownAttackDetection(payload, unknownAttack_Pattern)
+		unknownAttackFound, err = wsUnknownAttackDetection(payload, service_DetectUnknownAttack["patterns"].(map[string]interface{}))
 		if err != nil {
+			fmt.Printf("DEBUG: %+v", err)
 			sendErrorResponse(w, "Error processing data unknown attack detection", http.StatusInternalServerError)
 			return
 		}
 
+	}
+
+	var insecureRedirectFound bool
+	if agent_RunningProfile["detect_insecure_redirect"].(bool) && service_DetectInsecureRedirect["enable"].(bool) {
+		redirect_domain := req.Payload.Data.HTTPRequest.Headers.Referer
+		self_domain := req.Payload.Data.HTTPRequest.Host
+		insecureRedirectFound, err = wsInsecureRedirectDetection(self_domain, redirect_domain, service_DetectInsecureRedirect)
+		if err != nil {
+			sendErrorResponse(w, "Error processing data insecure redirect detection", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	var insecureFileUploadFound bool
+	var _ map[string]map[string]bool
+	if agent_RunningProfile["detect_insecure_file_upload"].(bool) && service_DetectInsecureFileUpload["enable"].(bool) {
+		payload := req.Payload.Data.HTTPRequest.Files
+		// Convert []shared.UploadedFile to []interface{}
+		filesInterface := make([]interface{}, len(payload))
+		for i, v := range payload {
+			filesInterface[i] = map[string]interface{}{
+				"FileName":    v.FileName,
+				"FileSize":    float64(v.FileSize),
+				"FileType":    v.FileType,
+				"FileContent": v.FileContent,
+				"FileHash256": v.FileHash256,
+			}
+		}
+
+		insecureFileUploadFound, _, err = wsInsecureFileUpload(filesInterface, service_DetectInsecureFileUpload)
+		if err != nil {
+			sendErrorResponse(w, "Error processing data insecure file upload detection", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	mapData := shared.ResponseData{
@@ -488,6 +629,8 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 		HTTPVerbTamperingDetection:  httpVerbTamperingFound,
 		HTTPLargeRequestDetection:   httpLargeRequestFound,
 		UnknownAttackDetection:      unknownAttackFound,
+		InsecureRedirectDetection:   insecureRedirectFound,
+		InsecureFileUploadDetection: insecureFileUploadFound,
 	}
 
 	var analysisResult string
@@ -533,6 +676,8 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 				"http_verb_tampering_detection":  httpVerbTamperingFound,
 				"http_large_request_detection":   httpLargeRequestFound,
 				"unknown_attack_detection":       unknownAttackFound,
+				"insecure_redirect_detection":    insecureRedirectFound,
+				"insecure_file_upload":           insecureFileUploadFound,
 			}),
 			"message":              "Analysis completed successfully.",
 			"request_created_at":   req.RequestCreatedAt,
