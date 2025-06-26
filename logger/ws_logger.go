@@ -225,6 +225,6 @@ func Log(level string, log_data map[string]interface{}) {
 	} else if UPPER_LOG_LEVEL == "TRACE" {
 		logger.Trace(string(jsonData))
 	} else {
-		logger.Println("Unknownn log level:", string(jsonData))
+		logger.Println("Unknown log level:", string(jsonData))
 	}
 }
