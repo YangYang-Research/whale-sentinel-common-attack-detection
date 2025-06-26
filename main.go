@@ -596,7 +596,7 @@ func handleDetection(w http.ResponseWriter, r *http.Request) {
 
 	var insecureRedirectFound bool
 	if agent_RunningProfile["detect_insecure_redirect"].(bool) && service_DetectInsecureRedirect["enable"].(bool) {
-		redirect_domain := req.Payload.Data.HTTPRequest.Headers.Referer
+		redirect_domain := req.Payload.Data.HTTPRequest.Headers.Referrer
 		self_domain := req.Payload.Data.HTTPRequest.Host
 		insecureRedirectFound, err = wsInsecureRedirectDetection(self_domain, redirect_domain, service_DetectInsecureRedirect)
 		if err != nil {

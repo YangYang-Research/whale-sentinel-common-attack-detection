@@ -43,7 +43,7 @@ type (
 		UserAgent     string `json:"user-agent"`
 		ContentType   string `json:"content-type"`
 		ContentLength int    `json:"content-length"`
-		Referer       string `json:"referer"`
+		Referrer      string `json:"referrer"`
 	}
 
 	UploadedFile struct {
