@@ -177,6 +177,11 @@ func wsUnknownAttackDetection(input string, patterns map[string]interface{}) (bo
 }
 
 func wsInsecureRedirectDetection(self_domain string, redirect_domain string, patterns map[string]interface{}) (bool, error) {
+
+	if redirect_domain == "" {
+		return false, nil
+	}
+
 	// Parse redirect_domain để lấy phần host
 	parsedURL, err := url.Parse(redirect_domain)
 	if err != nil {
@@ -218,11 +223,8 @@ func wsInsecureFileUpload(files []interface{}, patterns map[string]interface{}) 
 	foundViolation := false
 
 	for _, file := range files {
-		fmt.Printf("DEBUG file: %+v (type: %T)\n", file, file)
-
 		fileMap, ok := file.(map[string]interface{})
 		if !ok {
-			fmt.Println("DEBUG: file is not map[string]interface{}")
 			continue
 		}
 
@@ -270,8 +272,7 @@ func wsInsecureFileUpload(files []interface{}, patterns map[string]interface{}) 
 		// Lưu lại kết quả kiểm tra cho file này
 		allViolations[fileName] = violations
 	}
-	fmt.Printf("Debug: %+v", allViolations)
-	fmt.Printf("Debug: %+v", foundViolation)
+
 	return foundViolation, allViolations, nil
 }
 
