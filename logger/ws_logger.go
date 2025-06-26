@@ -62,7 +62,7 @@ type (
 		SQLInjectionDetection       bool `json:"sql_injection_detection"`
 		HttpVerbTamperingDetection  bool `json:"http_verb_tampering_detection"`
 		HttpLargeRequestDetection   bool `json:"http_large_request_detection"`
-		UnknowAttackDetection       bool `json:"unknow_attack_detection"`
+		UnknownAttackDetection      bool `json:"unknown_attack_detection"`
 	}
 
 	Timestamps struct {
@@ -180,7 +180,7 @@ func Log(level string, log_data map[string]interface{}) {
 			SQLInjectionDetection:       cadMap["sql_injection_detection"],
 			HttpVerbTamperingDetection:  cadMap["http_verb_tampering_detection"],
 			HttpLargeRequestDetection:   cadMap["http_large_request_detection"],
-			UnknowAttackDetection:       cadMap["unknow_attack_detection"],
+			UnknownAttackDetection:      cadMap["unknown_attack_detection"],
 		},
 		Message: log_data["message"].(string),
 		RawRequest: func() interface{} {

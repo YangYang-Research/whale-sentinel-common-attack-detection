@@ -30,17 +30,28 @@ type (
 	HTTPRequest struct {
 		Method      string            `json:"method"`
 		URL         string            `json:"url"`
+		Scheme      string            `json:"scheme"`
 		Host        string            `json:"host"`
+		Endpoint    string            `json:"endpoint"`
 		Headers     HTTPRequestHeader `json:"headers"`
 		QueryParams string            `json:"query_parameters"`
 		Body        string            `json:"body"`
+		Files       []UploadedFile    `json:"files"`
 	}
 
 	HTTPRequestHeader struct {
 		UserAgent     string `json:"user-agent"`
 		ContentType   string `json:"content-type"`
 		ContentLength int    `json:"content-length"`
-		Referer       string `json:"referer"`
+		Referrer      string `json:"referrer"`
+	}
+
+	UploadedFile struct {
+		FileName    string `json:"file_name"`
+		FileSize    int    `json:"file_size"`
+		FileContent string `json:"file_content"`
+		FileType    string `json:"file_type"`
+		FileHash256 string `json:"file_hash256"`
 	}
 
 	AgentProfileRaw struct {
@@ -66,7 +77,9 @@ type (
 		SQLInjectionDetection       bool `json:"sql_injection_detection"`
 		HTTPVerbTamperingDetection  bool `json:"http_verb_tampering_detection"`
 		HTTPLargeRequestDetection   bool `json:"http_large_request_detection"`
-		UnknowAttackDetection       bool `json:"unknow_attack_detection"`
+		UnknownAttackDetection      bool `json:"unknown_attack_detection"`
+		InsecureFileUploadDetection bool `json:"insecure_file_upload_detection"`
+		InsecureRedirectDetection   bool `json:"insecure_redirect_detection"`
 	}
 
 	ErrorResponse struct {
