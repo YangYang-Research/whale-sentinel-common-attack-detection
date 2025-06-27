@@ -64,6 +64,12 @@ func init() {
 	}
 }
 
+func handlerHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
 // wsHandleDecoder decodes the input string
 func wsHandleDecoder(input string) (string, error) {
 
@@ -786,9 +792,11 @@ func main() {
 	logger.SetupWSLogger("ws-common-attack-detection", logMaxSize, logMaxBackups, logMaxAge, logCompression)
 
 	// Wrap the handler with a 30-second timeout
+	timeoutHandlerHealth := http.TimeoutHandler(http.HandlerFunc(handlerHealth), 30*time.Second, "Request time out")
 	timeoutHandler := http.TimeoutHandler(http.HandlerFunc(handleDetection), 30*time.Second, "Request timed out")
 
 	// Register the timeout handler
+	http.Handle("/health", timeoutHandlerHealth)
 	http.Handle("/api/v1/ws/services/common-attack-detection", apiKeyAuthMiddleware(timeoutHandler))
 	log.Fatal(http.ListenAndServe(":5003", nil))
 }
