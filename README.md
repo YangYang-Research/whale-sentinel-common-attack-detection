@@ -16,6 +16,20 @@ Key Functions:
 
 ✅ Seamless Integration with WS Security Framework – Works in sync with other Whale Sentinel services to deliver continuous security monitoring, active threat prevention, and instantaneous response.
 
-## Contributing
+---
 
-## License 
+## 🤝 Contributing
+
+We welcome contributions and feedback. Please fork the repository and open a pull request with your suggested changes.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## 🛡️ Security & Reporting
+
+If you discover a vulnerability, please report it responsibly via GitHub Issues or contact the maintainers privately.
